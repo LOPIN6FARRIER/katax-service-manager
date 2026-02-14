@@ -352,6 +352,13 @@ export class Katax {
     }
     const socket = new WebSocketService(config);
     await socket.init();
+    
+    // Connect logger to first socket for broadcasting
+    if (this._sockets.size === 0) {
+      (this._logger as LoggerService).setSocketService(socket);
+      this._logger!.debug({ message: 'Logger connected to WebSocket for broadcasting' });
+    }
+    
     return socket;
   }
 

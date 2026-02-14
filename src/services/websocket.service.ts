@@ -66,24 +66,24 @@ export class WebSocketService implements IWebSocketService {
 
       // Handle connections
       this.io.on('connection', (socket) => {
-        logger.debug({ socketId: socket.id }, 'WebSocket client connected');
+        logger.info({ socketId: socket.id }, 'WebSocket client connected');
 
         // Handle room joining
         socket.on('join-room', (room: string) => {
           socket.join(room);
-          logger.debug({ socketId: socket.id, room }, 'Client joined room');
+          logger.info({ socketId: socket.id, room }, 'Client joined room');
           socket.emit('room-joined', { room });
         });
 
         // Handle room leaving
         socket.on('leave-room', (room: string) => {
           socket.leave(room);
-          logger.debug({ socketId: socket.id, room }, 'Client left room');
+          logger.info({ socketId: socket.id, room }, 'Client left room');
           socket.emit('room-left', { room });
         });
 
         socket.on('disconnect', () => {
-          logger.debug({ socketId: socket.id }, 'WebSocket client disconnected');
+          logger.info({ socketId: socket.id }, 'WebSocket client disconnected');
         });
       });
 
