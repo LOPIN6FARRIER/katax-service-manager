@@ -1,6 +1,6 @@
 {
   "name": "katax-service-manager",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Runtime service container for Node.js applications - manages config, logging, database pools, and WebSocket services",
   "type": "module",
   "main": "./dist/index.js",
@@ -61,7 +61,8 @@
     "mongodb": "^6.3.0",
     "mysql2": "^3.6.0",
     "pg": "^8.11.0",
-    "redis": "^4.0.0"
+    "redis": "^4.0.0",
+    "pino-pretty": "^10.0.0"
   },
   "peerDependenciesMeta": {
     "pg": {
@@ -74,6 +75,9 @@
       "optional": true
     },
     "redis": {
+      "optional": true
+    },
+    "pino-pretty": {
       "optional": true
     }
   },
