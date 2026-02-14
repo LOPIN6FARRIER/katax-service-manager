@@ -279,10 +279,21 @@ export interface WebSocketConfig {
   name?: string;
 
   /**
-   * Socket.IO server port
+   * Socket.IO server port (standalone mode)
+   * Only used if httpServer is not provided
    * @default 3001
    */
   port?: number;
+
+  /**
+   * HTTP server to attach Socket.IO to (shared port mode)
+   * When provided, Socket.IO will use the same port as Express
+   * @example
+   * const httpServer = createServer(app);
+   * await katax.socket({ name: 'main', httpServer });
+   * httpServer.listen(3000);
+   */
+  httpServer?: unknown;
 
   /**
    * CORS configuration

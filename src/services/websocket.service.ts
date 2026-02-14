@@ -1,4 +1,5 @@
 import { Server as SocketIOServer } from 'socket.io';
+import type { Server as HttpServer } from 'http';
 import pino from 'pino';
 import type { IWebSocketService, WebSocketConfig } from '../types.js';
 
@@ -20,6 +21,9 @@ export class WebSocketService implements IWebSocketService {
 
   /**
    * Initialize the WebSocket server
+   * Supports two modes:
+   * - Standalone: Creates its own server on specified port
+   * - Attached: Attaches to existing HTTP server (shares port with Express)
    */
   public async init(): Promise<void> {
     if (this.initialized) {
@@ -27,12 +31,26 @@ export class WebSocketService implements IWebSocketService {
     }
 
     try {
-      this.io = new SocketIOServer(this.config.port ?? 3001, {
-        cors: this.config.cors ?? {
-          origin: '*',
-          credentials: false,
-        },
-      });
+      const corsConfig = this.config.cors ?? {
+        origin: '*',
+        credentials: false,
+      };
+
+      // Mode 1: Attached to existing HTTP server (same port as Express)
+      if (this.config.httpServer) {
+        logger.info('Attaching Socket.IO to existing HTTP server');
+        this.io = new SocketIOServer(this.config.httpServer as HttpServer, {
+          cors: corsConfig,
+        });
+      }
+      // Mode 2: Standalone server (separate port)
+      else {
+        const port = this.config.port ?? 3001;
+        logger.info({ port }, 'Creating standalone Socket.IO server');
+        this.io = new SocketIOServer(port, {
+          cors: corsConfig,
+        });
+      }
 
       // Handle authentication if enabled
       if (this.config.enableAuth && this.config.authToken) {
