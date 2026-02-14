@@ -213,7 +213,7 @@ export class Katax {
 
     // Check if database with this name already exists
     if (this._databases.has(config.name)) {
-      this._logger!.info({
+      this._logger!.debug({
         message: `Database '${config.name}' already exists, returning existing instance`,
       });
       return this._databases.get(config.name)!;
@@ -221,7 +221,7 @@ export class Katax {
 
     // Check if database is currently being initialized (prevent race condition)
     if (this._pendingDatabases.has(config.name)) {
-      this._logger!.info({
+      this._logger!.debug({
         message: `Database '${config.name}' initialization in progress, waiting...`,
       });
       return this._pendingDatabases.get(config.name)!;
@@ -295,7 +295,7 @@ export class Katax {
 
     // Check if socket with this name already exists
     if (this._sockets.has(config.name)) {
-      this._logger!.info({
+      this._logger!.debug({
         message: `WebSocket '${config.name}' already exists, returning existing instance`,
       });
       return this._sockets.get(config.name)!;
@@ -303,7 +303,7 @@ export class Katax {
 
     // Check if socket is currently being initialized (prevent race condition)
     if (this._pendingSockets.has(config.name)) {
-      this._logger!.info({
+      this._logger!.debug({
         message: `WebSocket '${config.name}' initialization in progress, waiting...`,
       });
       return this._pendingSockets.get(config.name)!;
