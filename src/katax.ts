@@ -316,9 +316,17 @@ export class Katax {
     try {
       const socket = await initPromise;
       this._sockets.set(config.name, socket);
-      this._logger!.info({
-        message: `WebSocket server '${config.name}' running on port ${config.port ?? 3001}`,
-      });
+      
+      // Log appropriate message based on mode
+      if (config.httpServer) {
+        this._logger!.info({
+          message: `WebSocket server '${config.name}' attached to HTTP server (shared port)`,
+        });
+      } else {
+        this._logger!.info({
+          message: `WebSocket server '${config.name}' running on port ${config.port ?? 3001}`,
+        });
+      }
       return socket;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -333,9 +341,15 @@ export class Katax {
    * Internal method to create WebSocket server
    */
   private async createSocket(config: WebSocketConfig): Promise<IWebSocketService> {
-    this._logger!.info({
-      message: `Creating WebSocket server '${config.name}' on port ${config.port ?? 3001}...`,
-    });
+    if (config.httpServer) {
+      this._logger!.info({
+        message: `Creating WebSocket server '${config.name}' (attached to HTTP server)...`,
+      });
+    } else {
+      this._logger!.info({
+        message: `Creating WebSocket server '${config.name}' on port ${config.port ?? 3001}...`,
+      });
+    }
     const socket = new WebSocketService(config);
     await socket.init();
     return socket;
