@@ -154,6 +154,81 @@ export class WebSocketService implements IWebSocketService {
   }
 
   /**
+   * Register a custom connection handler
+   * Use this to add custom logic when clients connect (like custom events)
+   *
+   * @example
+   * katax.socket.onConnection((socket) => {
+   *   socket.emit('bienvenida', '¡Hola!');
+   *   socket.on('mensaje', (data) => {
+   *     katax.socket.emit('mensaje-servidor', `Recibido: ${data}`);
+   *   });
+   * });
+   */
+  public onConnection(handler: (socket: unknown) => void): void {
+    if (!this.initialized || !this.io) {
+      throw new Error('WebSocket not initialized. Call init() first.');
+    }
+    this.io.on('connection', handler);
+  }
+
+  /**
+   * Check if there are clients connected in a specific room
+   *
+   * @example
+   * if (katax.socket.hasRoomListeners('spotify')) {
+   *   katax.socket.emitToRoom('spotify', 'update', data);
+   * }
+   */
+  public hasRoomListeners(room: string): boolean {
+    if (!this.initialized || !this.io) {
+      return false;
+    }
+    const roomSet = this.io.sockets.adapter.rooms.get(room);
+    return !!(roomSet && roomSet.size > 0);
+  }
+
+  /**
+   * Get the number of clients connected in a specific room
+   *
+   * @example
+   * const count = katax.socket.getRoomClientsCount('spotify');
+   * console.log(`${count} clientes en sala spotify`);
+   */
+  public getRoomClientsCount(room: string): number {
+    if (!this.initialized || !this.io) {
+      return 0;
+    }
+    const roomSet = this.io.sockets.adapter.rooms.get(room);
+    return roomSet ? roomSet.size : 0;
+  }
+
+  /**
+   * Check if there are any connected clients
+   *
+   * @example
+   * if (katax.socket.hasConnectedClients()) {
+   *   katax.socket.emit('broadcast', { msg: 'Hola a todos' });
+   * }
+   */
+  public hasConnectedClients(): boolean {
+    if (!this.initialized || !this.io) {
+      return false;
+    }
+    return this.io.engine.clientsCount > 0;
+  }
+
+  /**
+   * Get total number of connected clients
+   */
+  public getConnectedClientsCount(): number {
+    if (!this.initialized || !this.io) {
+      return 0;
+    }
+    return this.io.engine.clientsCount;
+  }
+
+  /**
    * Close the WebSocket server
    */
   public async close(): Promise<void> {

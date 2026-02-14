@@ -478,6 +478,39 @@ export interface IWebSocketService {
   on(event: string, handler: (data: unknown) => void): void;
 
   /**
+   * Register a custom connection handler
+   * Use this to add custom logic when clients connect
+   * @param handler - Connection handler function receiving the socket
+   */
+  onConnection(handler: (socket: unknown) => void): void;
+
+  /**
+   * Check if there are clients connected in a specific room
+   * @param room - Room name to check
+   * @returns true if room has at least one client
+   */
+  hasRoomListeners(room: string): boolean;
+
+  /**
+   * Get the number of clients connected in a specific room
+   * @param room - Room name to check
+   * @returns Number of clients in the room
+   */
+  getRoomClientsCount(room: string): number;
+
+  /**
+   * Check if there are any connected clients
+   * @returns true if at least one client is connected
+   */
+  hasConnectedClients(): boolean;
+
+  /**
+   * Get total number of connected clients
+   * @returns Number of connected clients
+   */
+  getConnectedClientsCount(): number;
+
+  /**
    * Close the WebSocket server
    */
   close(): Promise<void>;
