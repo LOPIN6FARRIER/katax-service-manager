@@ -133,6 +133,7 @@ export class Katax {
     this._config = new ConfigService();
     this._logger = new LoggerService(config?.logger);
     this._cronService = new CronService();
+    await this._cronService.init();
     this._initialized = true;
 
     this._logger.info({ message: 'Katax initialized (config, logger, cron ready)' });
