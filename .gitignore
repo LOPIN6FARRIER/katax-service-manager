@@ -28,6 +28,10 @@ Thumbs.db
 # Logs
 logs/
 *.log
+
+# Internal docs (not for repo)
+ANALYSIS.md
+REFACTORING*.md
 npm-debug.log*
 
 # Testing
