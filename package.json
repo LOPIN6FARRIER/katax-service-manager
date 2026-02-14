@@ -58,11 +58,11 @@
     "socket.io": "^4.8.1"
   },
   "peerDependencies": {
-    "mongodb": "^6.3.0",
-    "mysql2": "^3.6.0",
-    "pg": "^8.11.0",
-    "redis": "^4.0.0",
-    "pino-pretty": "^10.0.0"
+    "mongodb": ">=6.0.0",
+    "mysql2": ">=3.0.0",
+    "pg": ">=8.0.0",
+    "redis": ">=4.0.0",
+    "pino-pretty": ">=10.0.0"
   },
   "peerDependenciesMeta": {
     "pg": {
