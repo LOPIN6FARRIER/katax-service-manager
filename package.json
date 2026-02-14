@@ -1,0 +1,93 @@
+{
+  "name": "katax-service-manager",
+  "version": "0.1.0",
+  "description": "Runtime service container for Node.js applications - manages config, logging, database pools, and WebSocket services",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --build",
+    "clean": "rimraf dist",
+    "prebuild": "npm run clean",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "service-manager",
+    "singleton",
+    "dependency-injection",
+    "logger",
+    "database-pool",
+    "websocket",
+    "configuration",
+    "typescript"
+  ],
+  "author": "Vinicio Esparza",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LOPIN6FARRIER/katax-service-manager.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LOPIN6FARRIER/katax-service-manager/issues"
+  },
+  "homepage": "https://github.com/LOPIN6FARRIER/katax-service-manager#readme",
+  "dependencies": {
+    "node-cron": "^4.2.1",
+    "pino": "^9.5.0",
+    "socket.io": "^4.8.1"
+  },
+  "peerDependencies": {
+    "mongodb": "^6.3.0",
+    "mysql2": "^3.6.0",
+    "pg": "^8.11.0",
+    "redis": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "pg": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    },
+    "mongodb": {
+      "optional": true
+    },
+    "redis": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/node-cron": "^3.0.11",
+    "@typescript-eslint/eslint-plugin": "^8.20.0",
+    "@typescript-eslint/parser": "^8.20.0",
+    "@vitest/coverage-v8": "^2.1.8",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
