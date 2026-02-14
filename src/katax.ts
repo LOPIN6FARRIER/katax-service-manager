@@ -190,8 +190,19 @@ export class Katax {
    *
    * // Later, in any controller:
    * const db = katax.db('main');  // Quick access
+   *
+   * // Optional database (app continues if connection fails):
+   * const optionalDb = await katax.database({
+   *   name: 'analytics',
+   *   type: 'postgresql',
+   *   required: false,  // Returns null on failure instead of throwing
+   *   connection: { ... }
+   * });
+   * if (optionalDb) {
+   *   // use database
+   * }
    */
-  public async database(config: DatabaseConfig): Promise<IDatabaseService> {
+  public async database(config: DatabaseConfig): Promise<IDatabaseService | null> {
     this.ensureInitialized();
     
     // Validate name is provided
@@ -226,6 +237,17 @@ export class Katax {
       return db;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // If required is explicitly false, log warning and return null instead of throwing
+      if (config.required === false) {
+        this._logger!.warn({ 
+          message: `Database '${config.name}' connection failed (non-required), continuing without it`,
+          err: error 
+        });
+        return null;
+      }
+      
+      // Default behavior: throw error (fail-fast)
       this._logger!.error({ message: `Failed to create database '${config.name}'`, err: error });
       throw new Error(`Database '${config.name}' initialization failed: ${errorMessage}`);
     } finally {

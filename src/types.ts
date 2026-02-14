@@ -169,6 +169,14 @@ export interface DatabaseConfig {
   type: 'postgresql' | 'mysql' | 'mongodb' | 'redis';
 
   /**
+   * Whether this database connection is required for the app to function
+   * - true (default): throws error if connection fails, app crashes
+   * - false: logs warning if connection fails, returns null, app continues
+   * @default true
+   */
+  required?: boolean;
+
+  /**
    * Connection string or connection options
    */
   connection:
