@@ -40,4 +40,4 @@ export { CacheService } from './services/cache.service.js';
 export { RegistryService } from './services/registry.service.js';
 export { RedisTransport } from './services/transports/redis.transport.js';
 export { CallbackTransport } from './services/transports/callback.transport.js';
-export { registerVersionToRedis, startHeartbeat } from './utils/registration.js';
+export { registerVersionToRedis, startHeartbeat, registerProjectInRedis } from './utils/registration.js';

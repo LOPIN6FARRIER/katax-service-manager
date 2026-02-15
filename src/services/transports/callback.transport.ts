@@ -6,7 +6,10 @@ import type { LogTransport, LogMessage } from '../../types.js';
 export class CallbackTransport implements LogTransport {
   public name?: string;
 
-  constructor(private readonly fn: (log: LogMessage) => Promise<void>, name?: string) {
+  constructor(
+    private readonly fn: (log: LogMessage) => Promise<void>,
+    name?: string
+  ) {
     this.name = name ?? 'callback';
   }
 

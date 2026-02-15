@@ -29,7 +29,8 @@ export class RedisTransport implements LogTransport {
   public async send(log: LogMessage): Promise<void> {
     // Prepare payload fields for XADD. Flatten metadata into a JSON field.
     const { message, broadcast, room, ...metadata } = log;
-    const app = (log as any)['appName'] ?? (metadata as any)['appName'] ?? (metadata as any)['app'] ?? null;
+    const app =
+      (log as any)['appName'] ?? (metadata as any)['appName'] ?? (metadata as any)['app'] ?? null;
 
     const fields: (string | number)[] = [];
     fields.push('level', ((metadata as any)['level'] as string) ?? 'info');

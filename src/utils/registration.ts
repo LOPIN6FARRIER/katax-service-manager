@@ -1,5 +1,5 @@
 import { type IDatabaseService } from '../types.js';
-import { hostname } from 'os';
+import { hostname, networkInterfaces } from 'os';
 
 /**
  * Register current app version into a Redis Stream (katax:events)
@@ -8,26 +8,41 @@ import { hostname } from 'os';
  */
 export async function registerVersionToRedis(
   db: IDatabaseService,
-  opts: { app?: string; version?: string; port?: number | string; extra?: Record<string, unknown> } = {}
+  opts: {
+    app?: string;
+    version?: string;
+    port?: number | string;
+    extra?: Record<string, unknown>;
+  } = {}
 ): Promise<void> {
   if (db.config?.type !== 'redis') {
     throw new Error('registerVersionToRedis requires a Redis database connection');
   }
 
-  const app = opts.app ?? (process.env['KATAX_APP_NAME'] ?? process.env['npm_package_name'] ?? 'unknown');
+  const app =
+    opts.app ?? process.env['KATAX_APP_NAME'] ?? process.env['npm_package_name'] ?? 'unknown';
   const version = opts.version ?? process.env['npm_package_version'] ?? '0.0.0';
   const host = hostname();
+  const ip = getLocalIp();
   const pid = process.pid;
   const port = opts.port !== undefined ? String(opts.port) : undefined;
   const timestamp = String(Date.now());
 
   const fields: (string | number)[] = [
-    'type', 'version',
-    'app', app,
-    'version', version,
-    'host', host,
-    'pid', String(pid),
-    'timestamp', timestamp,
+    'type',
+    'version',
+    'app',
+    app,
+    'version',
+    version,
+    'host',
+    host,
+    'ip',
+    ip ?? '',
+    'pid',
+    String(pid),
+    'timestamp',
+    timestamp,
   ];
 
   if (port) {
@@ -39,6 +54,21 @@ export async function registerVersionToRedis(
   }
 
   await db.redis!('XADD', 'katax:events', '*', ...fields);
+}
+
+/**
+ * Return the first non-internal IPv4 address found on the host, or null.
+ */
+function getLocalIp(): string | null {
+  const nets = networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    const addrs = nets[name];
+    if (!addrs) continue;
+    for (const addr of addrs) {
+      if (addr.family === 'IPv4' && !addr.internal) return addr.address;
+    }
+  }
+  return null;
 }
 
 /**
@@ -69,6 +99,7 @@ export function startHeartbeat(
       app,
       version: process.env['npm_package_version'] ?? '0.0.0',
       host: hostname(),
+      ip: getLocalIp(),
       port: port ?? null,
       pid,
       ts: Date.now(),
@@ -91,4 +122,53 @@ export function startHeartbeat(
       clearInterval(timer);
     },
   };
+}
+
+/**
+ * Register or update a project record in Redis so dashboards can list known projects.
+ * Stores a hash at `katax:project:<app>` and adds the app to the `katax:projects` set.
+ */
+export async function registerProjectInRedis(
+  db: IDatabaseService,
+  opts: { app?: string; version?: string; port?: number | string; extra?: Record<string, unknown> } = {}
+): Promise<void> {
+  if (db.config?.type !== 'redis') {
+    throw new Error('registerProjectInRedis requires a Redis database connection');
+  }
+
+  const app = opts.app ?? process.env['KATAX_APP_NAME'] ?? process.env['npm_package_name'] ?? 'unknown';
+  const version = opts.version ?? process.env['npm_package_version'] ?? '0.0.0';
+  const host = hostname();
+  const ip = getLocalIp();
+  const port = opts.port !== undefined ? String(opts.port) : '';
+  const pid = String(process.pid);
+  const updated_at = String(Date.now());
+
+  const key = `katax:project:${app}`;
+
+  const fields: (string | number)[] = [
+    'app',
+    app,
+    'version',
+    version,
+    'host',
+    host,
+    'ip',
+    ip ?? '',
+    'port',
+    port,
+    'pid',
+    pid,
+    'updated_at',
+    updated_at,
+  ];
+
+  if (opts.extra) {
+    fields.push('meta', JSON.stringify(opts.extra));
+  }
+
+  // HMSET/HSET with multiple fields
+  await db.redis!('HSET', key, ...fields);
+  // Add to index set
+  await db.redis!('SADD', 'katax:projects', app);
 }

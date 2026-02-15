@@ -24,17 +24,17 @@ import type {
 /**
  * Katax Service Manager
  * Singleton pattern for managing shared services across the application
- * 
+ *
  * @example
  * // In your main entry file (index.ts)
  * import { katax } from 'katax-service-manager';
- * 
+ *
  * katax.init().then(async () => {
  *   await katax.database({ name: 'main', type: 'postgresql', connection: {...} });
  *   katax.cron({ name: 'cleanup', schedule: '0 2 * * *', task: cleanupFn });
  *   app.listen(3000);
  * });
- * 
+ *
  * // In any controller/service
  * import { katax } from 'katax-service-manager';
  * const db = katax.db('main');
@@ -95,14 +95,14 @@ export class Katax {
   /**
    * Initialize Katax services (config, logger, cron)
    * MUST be called before using any other method
-   * 
+   *
    * @param config - Optional configuration for services
    * @returns Promise<Katax> - Returns this instance for chaining
-   * 
+   *
    * @example
    * // Basic init
    * await katax.init();
-   * 
+   *
    * // With logger config
    * await katax.init({
    *   logger: {
@@ -110,13 +110,13 @@ export class Katax {
    *     prettyPrint: true
    *   }
    * });
-   * 
+   *
    * // With .then()
    * katax.init({ logger: { level: 'debug' } }).then((k) => {
    *   k.logger.info({ message: 'Ready!' });
    *   app.listen(3000);
    * });
-   * 
+   *
    * // With registry auto-registration
    * await katax.init({
    *   registry: {
@@ -158,9 +158,9 @@ export class Katax {
         await this._registry.register();
       } catch (error) {
         // Registry is optional - warn but don't fail
-        this._logger.warn({ 
-          message: 'Failed to register with registry, continuing without it', 
-          err: error 
+        this._logger.warn({
+          message: 'Failed to register with registry, continuing without it',
+          err: error,
         });
       }
     }
@@ -176,7 +176,7 @@ export class Katax {
     if (!this._initialized) {
       throw new Error(
         'Katax not initialized. Call katax.init() before using any services.\n' +
-        'Example: await katax.init(); // or katax.init().then(() => {...})'
+          'Example: await katax.init(); // or katax.init().then(() => {...})'
       );
     }
   }
@@ -218,7 +218,7 @@ export class Katax {
    */
   public async database(config: DatabaseConfig): Promise<IDatabaseService | null> {
     this.ensureInitialized();
-    
+
     // Validate name is provided
     if (!config.name) {
       throw new Error('Database name is required');
@@ -251,16 +251,16 @@ export class Katax {
       return db;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      
+
       // If required is explicitly false, log warning and return null instead of throwing
       if (config.required === false) {
-        this._logger!.warn({ 
+        this._logger!.warn({
           message: `Database '${config.name}' connection failed (non-required), continuing without it`,
-          err: error 
+          err: error,
         });
         return null;
       }
-      
+
       // Default behavior: throw error (fail-fast)
       this._logger!.error({ message: `Failed to create database '${config.name}'`, err: error });
       throw new Error(`Database '${config.name}' initialization failed: ${errorMessage}`);
@@ -300,7 +300,7 @@ export class Katax {
    */
   public async socket(config: WebSocketConfig): Promise<IWebSocketService> {
     this.ensureInitialized();
-    
+
     // Validate name is provided
     if (!config.name) {
       throw new Error('WebSocket name is required');
@@ -329,7 +329,7 @@ export class Katax {
     try {
       const socket = await initPromise;
       this._sockets.set(config.name, socket);
-      
+
       // Log appropriate message based on mode
       if (config.httpServer) {
         this._logger!.info({
@@ -365,13 +365,13 @@ export class Katax {
     }
     const socket = new WebSocketService(config);
     await socket.init();
-    
+
     // Connect logger to first socket for broadcasting
     if (this._sockets.size === 0) {
       (this._logger as LoggerService).setSocketService(socket);
       this._logger!.debug({ message: 'Logger connected to WebSocket for broadcasting' });
     }
-    
+
     return socket;
   }
 
@@ -406,15 +406,15 @@ export class Katax {
   /**
    * Get a database connection by name (shortcut for common use case)
    * Use this in controllers/services to access databases created during init
-   * 
+   *
    * @param name - The database name used when creating with katax.database()
    * @returns The database service
    * @throws Error if database not found or Katax not initialized
-   * 
+   *
    * @example
    * // In controller
    * import { katax } from 'katax-service-manager';
-   * 
+   *
    * const db = katax.db('main');
    * const users = await db.query('SELECT * FROM users');
    */
@@ -431,7 +431,7 @@ export class Katax {
 
   /**
    * Get a WebSocket server by name (shortcut)
-   * 
+   *
    * @param name - The socket name used when creating with katax.socket()
    * @returns The WebSocket service
    * @throws Error if socket not found or Katax not initialized
@@ -573,10 +573,7 @@ export class Katax {
    * katax.env('PORT', '8080') // '8080' if PORT not set
    * katax.env('DEBUG', false) // false if DEBUG not set
    */
-  public env<T extends string | number | boolean = string>(
-    key: string,
-    defaultValue?: T
-  ): T {
+  public env<T extends string | number | boolean = string>(key: string, defaultValue?: T): T {
     const value = process.env[key];
 
     if (value === undefined) {
@@ -616,7 +613,7 @@ export class Katax {
   /**
    * Get current service info (from package.json + system metrics)
    * Useful for debugging or custom health endpoints
-   * 
+   *
    * @returns ServiceInfo with name, version, hostname, memory, uptime, etc.
    */
   public getServiceInfo(): ServiceInfo | null {
@@ -626,14 +623,14 @@ export class Katax {
   /**
    * Check health status of all services
    * Useful for health check endpoints in your API
-   * 
+   *
    * @returns Health check result with status of each service
-   * 
+   *
    * @example
    * // In your Express/Fastify API
    * app.get('/api/health', async (req, res) => {
    *   const health = await katax.healthCheck();
-   *   const statusCode = health.status === 'healthy' ? 200 : 
+   *   const statusCode = health.status === 'healthy' ? 200 :
    *                      health.status === 'degraded' ? 503 : 500;
    *   res.status(statusCode).json(health);
    * });
@@ -660,7 +657,9 @@ export class Katax {
         } else if (db.config?.type === 'mongodb') {
           // MongoDB client ping
           const client = await db.getClient();
-          await (client as { db: () => { command: (cmd: object) => Promise<unknown> } }).db().command({ ping: 1 });
+          await (client as { db: () => { command: (cmd: object) => Promise<unknown> } })
+            .db()
+            .command({ ping: 1 });
         } else {
           // SQL databases
           await db.query('SELECT 1');
@@ -693,15 +692,15 @@ export class Katax {
     }
 
     // If any database is down, mark as degraded
-    const allDbsHealthy = Object.values(result.services.databases).every(v => v);
-    const allSocketsHealthy = Object.values(result.services.sockets).every(v => v);
+    const allDbsHealthy = Object.values(result.services.databases).every((v) => v);
+    const allSocketsHealthy = Object.values(result.services.sockets).every((v) => v);
 
     if (!allDbsHealthy || !allSocketsHealthy || !result.services.cron) {
       result.status = 'degraded';
     }
 
     // If NO databases are healthy and there are databases configured, mark unhealthy
-    if (this._databases.size > 0 && !Object.values(result.services.databases).some(v => v)) {
+    if (this._databases.size > 0 && !Object.values(result.services.databases).some((v) => v)) {
       result.status = 'unhealthy';
     }
 
