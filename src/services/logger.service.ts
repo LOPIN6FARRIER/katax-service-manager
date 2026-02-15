@@ -1,5 +1,11 @@
 import pino, { type Logger as PinoLogger } from 'pino';
-import type { ILoggerService, IWebSocketService, LoggerConfig, LogMessage } from '../types.js';
+import type {
+  ILoggerService,
+  IWebSocketService,
+  LoggerConfig,
+  LogMessage,
+  LogTransport,
+} from '../types.js';
 
 /**
  * Logger service implementation using Pino
@@ -21,6 +27,8 @@ export class LoggerService implements ILoggerService {
   private readonly logger: PinoLogger;
   private readonly broadcastEnabled: boolean;
   private socketService: IWebSocketService | null = null;
+  private transports: LogTransport[] = [];
+  private appName?: string;
 
   /**
    * Create a LoggerService instance
@@ -78,6 +86,18 @@ export class LoggerService implements ILoggerService {
     this.socketService = socketService;
   }
 
+  public addTransport(t: LogTransport): void {
+    this.transports.push(t);
+  }
+
+  public removeTransport(name: string): void {
+    this.transports = this.transports.filter((t) => t.name !== name);
+  }
+
+  public setAppName(name: string): void {
+    this.appName = name;
+  }
+
   /**
    * Broadcast log to WebSocket if enabled
    * @param level - Log level
@@ -102,6 +122,7 @@ export class LoggerService implements ILoggerService {
         level,
         msg: message,
         ...(metadata && metadata),
+        appName: this.appName,
         timestamp: Date.now(),
       };
 
@@ -122,6 +143,9 @@ export class LoggerService implements ILoggerService {
     if (broadcast) {
       this.broadcast('trace', message, true, room, metadata);
     }
+
+    // deliver to transports asynchronously
+    this.deliverToTransports('trace', { message, ...metadata });
   }
 
   public debug(log: LogMessage): void {
@@ -132,6 +156,8 @@ export class LoggerService implements ILoggerService {
     if (broadcast) {
       this.broadcast('debug', message, true, room, metadata);
     }
+
+    this.deliverToTransports('debug', { message, ...metadata });
   }
 
   public info(log: LogMessage): void {
@@ -142,6 +168,8 @@ export class LoggerService implements ILoggerService {
     if (broadcast) {
       this.broadcast('info', message, true, room, metadata);
     }
+
+    this.deliverToTransports('info', { message, ...metadata });
   }
 
   public warn(log: LogMessage): void {
@@ -152,6 +180,8 @@ export class LoggerService implements ILoggerService {
     if (broadcast) {
       this.broadcast('warn', message, true, room, metadata);
     }
+
+    this.deliverToTransports('warn', { message, ...metadata });
   }
 
   public error(log: LogMessage): void {
@@ -162,6 +192,8 @@ export class LoggerService implements ILoggerService {
     if (broadcast) {
       this.broadcast('error', message, true, room, metadata);
     }
+
+    this.deliverToTransports('error', { message, ...metadata });
   }
 
   public fatal(log: LogMessage): void {
@@ -171,6 +203,54 @@ export class LoggerService implements ILoggerService {
 
     if (broadcast) {
       this.broadcast('fatal', message, true, room, metadata);
+    }
+
+    this.deliverToTransports('fatal', { message, ...metadata });
+  }
+
+  /**
+   * Deliver a log object to configured transports asynchronously.
+   * Respects transport.filter and per-log override `persist` when present.
+   */
+  private deliverToTransports(level: string, log: LogMessage): void {
+    // Attach level, timestamp and appName
+    const enriched: LogMessage = {
+      ...log,
+      level,
+      timestamp: Date.now(),
+      appName: this.appName,
+    };
+
+    const persistOverride = Object.prototype.hasOwnProperty.call(enriched, 'persist')
+      ? (enriched as any).persist
+      : undefined;
+
+    for (const t of this.transports) {
+      try {
+        // Determine if transport wants this log
+        if (persistOverride === false) {
+          continue;
+        }
+
+        if (t.filter && !t.filter(enriched) && persistOverride !== true) {
+          continue;
+        }
+
+        // fire-and-forget; log transport errors locally
+        void t.send(enriched).catch((err) => {
+          try {
+            this.logger.warn({ err }, `Transport ${t.name ?? '<anon>'} failed to send log`);
+          } catch (_) {
+            // swallow
+          }
+        });
+      } catch (error) {
+        try {
+          this.logger.warn({ err: error }, `Transport ${t.name ?? '<anon>'} threw synchronously`);
+        } catch (_) {
+          // swallow
+        }
+      }
     }
   }
 

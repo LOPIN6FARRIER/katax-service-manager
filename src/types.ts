@@ -33,6 +33,13 @@ export interface KataxInitConfig {
   logger?: LoggerConfig;
 
   /**
+   * Optional application name override. If not provided, Katax will try
+   * `process.env.KATAX_APP_NAME`, then `process.env.npm_package_name`, then
+   * `package.json` in `process.cwd()`.
+   */
+  appName?: string;
+
+  /**
    * Registry/Dashboard configuration
    * When provided, katax will auto-register with your registry via HTTP
    */
@@ -367,6 +374,28 @@ export interface LogMessage {
 }
 
 /**
+ * Transport interface for pluggable log destinations
+ */
+export interface LogTransport {
+  /** Optional name for the transport to identify it */
+  name?: string;
+
+  /**
+   * Optional filter predicate. If provided, transport will only receive logs
+   * when filter(log) returns true.
+   */
+  filter?(log: LogMessage): boolean;
+
+  /**
+   * Send a log message to the transport destination.
+   */
+  send(log: LogMessage): Promise<void>;
+
+  /** Optional close method for graceful shutdown */
+  close?(): Promise<void>;
+}
+
+/**
  * Logger service interface
  *
  * Simple and consistent API using objects
@@ -401,6 +430,21 @@ export interface ILoggerService {
    * @internal
    */
   setSocketService(socketService: IWebSocketService): void;
+
+  /**
+   * Register a transport to receive persisted logs
+   */
+  addTransport(t: LogTransport): void;
+
+  /**
+   * Remove a transport by name
+   */
+  removeTransport(name: string): void;
+
+  /**
+   * Set the application name that will be attached to logs
+   */
+  setAppName(name: string): void;
 }
 
 /**

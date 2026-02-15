@@ -132,6 +132,19 @@ export class Katax {
 
     this._config = new ConfigService();
     this._logger = new LoggerService(config?.logger);
+    // Determine app name with priority: explicit config, env KATAX_APP_NAME, npm_package_name, package.json
+    const explicitAppName = config?.appName;
+    const envApp = process.env['KATAX_APP_NAME'] ?? process.env['npm_package_name'];
+    const detectedAppName = explicitAppName ?? envApp ?? this._appName ?? undefined;
+    if (detectedAppName) {
+      try {
+        this._logger.setAppName(detectedAppName);
+        // also update internal app name so katax.appName reflects final value
+        this._appName = detectedAppName;
+      } catch {
+        // ignore failures setting app name on logger
+      }
+    }
     this._cronService = new CronService();
     await this._cronService.init();
     this._initialized = true;
