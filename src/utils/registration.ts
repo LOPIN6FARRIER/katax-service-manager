@@ -14,8 +14,8 @@ export async function registerVersionToRedis(
     throw new Error('registerVersionToRedis requires a Redis database connection');
   }
 
-  const app = opts.app ?? (process.env.KATAX_APP_NAME ?? process.env.npm_package_name ?? 'unknown');
-  const version = opts.version ?? process.env.npm_package_version ?? '0.0.0';
+  const app = opts.app ?? (process.env['KATAX_APP_NAME'] ?? process.env['npm_package_name'] ?? 'unknown');
+  const version = opts.version ?? process.env['npm_package_version'] ?? '0.0.0';
   const host = hostname();
   const pid = process.pid;
   const port = opts.port !== undefined ? String(opts.port) : undefined;
@@ -67,7 +67,7 @@ export function startHeartbeat(
     if (stopped) return;
     const payload = JSON.stringify({
       app,
-      version: process.env.npm_package_version ?? '0.0.0',
+      version: process.env['npm_package_version'] ?? '0.0.0',
       host: hostname(),
       port: port ?? null,
       pid,
