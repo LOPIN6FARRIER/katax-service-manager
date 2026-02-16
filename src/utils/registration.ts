@@ -1,5 +1,6 @@
-import { type IDatabaseService } from '../types.js';
 import { hostname, networkInterfaces } from 'os';
+import type { WebSocketService } from '../services/websocket.service.js';
+import { type IDatabaseService } from '../types.js';
 
 /**
  * Register current app version into a Redis Stream (katax:events)
@@ -77,8 +78,11 @@ function getLocalIp(): string | null {
  */
 export function startHeartbeat(
   db: IDatabaseService,
-  opts: { app: string; port?: number | string; intervalMs?: number; ttlSeconds?: number }
-): { stop: () => void } {
+  opts: { app: string; port?: number | string; intervalMs?: number; ttlSeconds?: number },
+  socket: WebSocketService | null
+): {
+  stop: () => void;
+} {
   if (db.config?.type !== 'redis') {
     throw new Error('startHeartbeat requires a Redis database connection');
   }
@@ -95,7 +99,7 @@ export function startHeartbeat(
 
   async function send() {
     if (stopped) return;
-    const payload = JSON.stringify({
+    const payload = {
       app,
       version: process.env['npm_package_version'] ?? '0.0.0',
       host: hostname(),
@@ -103,9 +107,17 @@ export function startHeartbeat(
       port: port ?? null,
       pid,
       ts: Date.now(),
-    });
+    };
     try {
-      await db.redis!('SET', key, payload, 'EX', String(ttl));
+      await db.redis!('SET', key, JSON.stringify(payload), 'EX', String(ttl));
+      if (socket) {
+        try {
+          socket.emit('heartbeat', payload, app);
+        } catch (err) {
+          // swallow; heartbeat should not throw
+          // consumer can check keys existence
+        }
+      }
     } catch (err) {
       // swallow; heartbeat should not throw
       // consumer can check keys existence
@@ -130,13 +142,19 @@ export function startHeartbeat(
  */
 export async function registerProjectInRedis(
   db: IDatabaseService,
-  opts: { app?: string; version?: string; port?: number | string; extra?: Record<string, unknown> } = {}
+  opts: {
+    app?: string;
+    version?: string;
+    port?: number | string;
+    extra?: Record<string, unknown>;
+  } = {}
 ): Promise<void> {
   if (db.config?.type !== 'redis') {
     throw new Error('registerProjectInRedis requires a Redis database connection');
   }
 
-  const app = opts.app ?? process.env['KATAX_APP_NAME'] ?? process.env['npm_package_name'] ?? 'unknown';
+  const app =
+    opts.app ?? process.env['KATAX_APP_NAME'] ?? process.env['npm_package_name'] ?? 'unknown';
   const version = opts.version ?? process.env['npm_package_version'] ?? '0.0.0';
   const host = hostname();
   const ip = getLocalIp();
