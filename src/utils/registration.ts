@@ -1,6 +1,5 @@
 import { hostname, networkInterfaces } from 'os';
-import type { WebSocketService } from '../services/websocket.service.js';
-import { type IDatabaseService } from '../types.js';
+import { type IDatabaseService, type IWebSocketService } from '../types.js';
 
 /**
  * Register current app version into a Redis Stream (katax:events)
@@ -79,7 +78,7 @@ function getLocalIp(): string | null {
 export function startHeartbeat(
   db: IDatabaseService,
   opts: { app: string; port?: number | string; intervalMs?: number; ttlSeconds?: number },
-  socket: WebSocketService | null
+  socket?: IWebSocketService
 ): {
   stop: () => void;
 } {
