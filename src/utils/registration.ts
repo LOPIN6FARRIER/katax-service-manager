@@ -77,7 +77,13 @@ function getLocalIp(): string | null {
  */
 export function startHeartbeat(
   db: IDatabaseService,
-  opts: { app: string; port?: number | string; intervalMs?: number; ttlSeconds?: number },
+  opts: {
+    app: string;
+    port?: number | string;
+    intervalMs?: number;
+    ttlSeconds?: number;
+    version?: string;
+  },
   socket?: IWebSocketService
 ): {
   stop: () => void;
@@ -87,6 +93,7 @@ export function startHeartbeat(
   }
 
   const app = opts.app;
+  const version = opts.version ?? process.env['npm_package_version'] ?? '0.0.0';
   const pid = process.pid;
   const port = opts.port !== undefined ? String(opts.port) : undefined;
   const ttl = opts.ttlSeconds ?? 60;
@@ -100,7 +107,7 @@ export function startHeartbeat(
     if (stopped) return;
     const payload = {
       app,
-      version: process.env['npm_package_version'] ?? '0.0.0',
+      version: version,
       host: hostname(),
       ip: getLocalIp(),
       port: port ?? null,
