@@ -1,6 +1,6 @@
 {
   "name": "katax-service-manager",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Runtime service container for Node.js applications - manages config, logging, database pools, and WebSocket services",
   "type": "module",
   "main": "./dist/index.js",
