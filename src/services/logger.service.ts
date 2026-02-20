@@ -94,6 +94,19 @@ export class LoggerService implements ILoggerService {
     this.transports = this.transports.filter((t) => t.name !== name);
   }
 
+  public async closeTransports(): Promise<void> {
+    const transports = [...this.transports];
+    this.transports = [];
+
+    await Promise.allSettled(
+      transports.map(async (transport) => {
+        if (transport.close) {
+          await transport.close();
+        }
+      })
+    );
+  }
+
   public setAppName(name: string): void {
     this.appName = name;
   }

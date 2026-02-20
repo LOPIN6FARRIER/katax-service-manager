@@ -8,6 +8,7 @@
 ## Features
 
 - ✅ **Singleton Pattern** - One Katax instance, but multiple databases/services
+- ✅ **Instantiable + Singleton** - Use `new Katax()` or `Katax.getInstance()`
 - 🔧 **Configuration Service** - Unified config from .env, package.json, and custom sources
 - 📝 **Logger Service** - Pino-based structured logging with WebSocket broadcast
 - 💾 **Database Service** - Connection pools for PostgreSQL, MySQL, MongoDB, and Redis
@@ -16,7 +17,7 @@
 - 🔌 **WebSocket Service** - Socket.IO for real-time communication
 - 🔄 **Multi-Instance** - Connect to multiple databases/WebSockets simultaneously
 - 🛡️ **Type-Safe** - Full TypeScript support with strict mode
-- 🎯 **Dynamic Creation** - Create services on-demand, no init() required
+- 🎯 **Dynamic Creation** - Create services on-demand after one-time `init()`
 
 ---
 
@@ -35,6 +36,7 @@
 - [Cache Service](#cache-service)
 - [Cron Service](#cron-service)
 - [WebSocket Service](#websocket-service)
+- [Registry Strategies](#registry-strategies)
 - [Common Patterns](#common-patterns)
 - [Best Practices](#best-practices)
 - [API Reference](#api-reference)
@@ -75,6 +77,7 @@ npm install socket.io
 import { Katax } from 'katax-service-manager';
 
 const katax = Katax.getInstance();
+await katax.init();
 
 // Create database connection
 const db = await katax.database({
@@ -113,10 +116,11 @@ process.on('SIGTERM', async () => {
 
 ### 1. Dynamic Service Creation
 
-No need for `init()` - create services when you need them:
+Initialize once with `init()` and then create services when you need them:
 
 ```typescript
 const katax = Katax.getInstance();
+await katax.init();
 
 // Create multiple database connections
 const postgres = await katax.database({
@@ -152,6 +156,20 @@ const db2 = await katax.database({ name: 'main', type: 'postgresql', ... });
 console.log(db1 === db2); // true - same instance
 ```
 
+### 2.5 Instance Modes (recommended)
+
+Use singleton for simple apps, or instantiate for tests/multi-context scenarios:
+
+```typescript
+import { Katax } from 'katax-service-manager';
+
+// Singleton mode (default)
+const kataxSingleton = Katax.getInstance();
+
+// Instantiable mode (isolated)
+const kataxIsolated = new Katax();
+```
+
 ### 3. Graceful Shutdown
 
 Always close connections properly:
@@ -169,6 +187,7 @@ Unified configuration from multiple sources:
 
 ```typescript
 const katax = Katax.getInstance();
+await katax.init();
 
 // Get config values with defaults
 const port = katax.config.get('PORT', 3000);
@@ -195,6 +214,7 @@ Pino-based structured logging with WebSocket broadcast support:
 
 ```typescript
 const katax = Katax.getInstance();
+await katax.init();
 
 // Simple logging
 katax.logger.info({ message: 'Server started' });
@@ -386,8 +406,7 @@ const user = await cache.get<User>('user:123'); // Returns User | null
 await cache.del('user:123');
 
 // Delete multiple keys
-const deleted = await cache.delMany(['key1', 'key2', 'key3']);
-console.log(`Deleted ${deleted} keys`);
+await cache.delMany(['key1', 'key2', 'key3']);
 
 // Check existence
 const exists = await cache.exists('user:123'); // boolean
@@ -403,10 +422,10 @@ await cache.expire('user:123', 300); // 5 minutes
 
 ```typescript
 // Set multiple keys at once
-await cache.mset({
-  'product:1': { id: 1, name: 'Laptop', price: 999 },
-  'product:2': { id: 2, name: 'Mouse', price: 29 }
-});
+await cache.mset([
+  ['product:1', { id: 1, name: 'Laptop', price: 999 }],
+  ['product:2', { id: 2, name: 'Mouse', price: 29 }]
+]);
 
 // Get multiple keys at once
 const products = await cache.mget<Product>(['product:1', 'product:2']);
@@ -435,7 +454,7 @@ await cache.decr('page-views');
 await cache.clear('temp:*');
 await cache.clear('user:session:*');
 
-// Clear entire cache (dangerous!)
+// Clear entire cache (disabled in production)
 await cache.clear('*');
 ```
 
@@ -462,6 +481,7 @@ Scheduled jobs with dynamic management:
 
 ```typescript
 const katax = Katax.getInstance();
+await katax.init();
 
 // Add a cron job
 katax.cron({
@@ -502,8 +522,7 @@ Real-time communication with Socket.IO:
 ```typescript
 const ws = await katax.socket({
   name: 'main',
-  port: 3001,
-  path: '/ws'
+  port: 3001
 });
 
 // Broadcast to all clients
@@ -520,14 +539,12 @@ ws.on('client-message', (data) => {
 // Multiple WebSocket servers
 const dashboardWs = await katax.socket({
   name: 'dashboard',
-  port: 3002,
-  path: '/dashboard'
+  port: 3002
 });
 
 const metricsWs = await katax.socket({
   name: 'metrics',
-  port: 3003,
-  path: '/metrics'
+  port: 3003
 });
 ```
 
@@ -535,12 +552,61 @@ const metricsWs = await katax.socket({
 ```javascript
 import { io } from 'socket.io-client';
 
-const socket = io('http://localhost:3001', { path: '/ws' });
+const socket = io('http://localhost:3001');
 
 socket.on('notification', (data) => {
   console.log('Notification:', data);
 });
 ```
+
+---
+
+## Registry Strategies
+
+Katax supports two registry modes:
+
+### 1) HTTP Registry (`registry.url`)
+
+```typescript
+await katax.init({
+  registry: {
+    url: 'https://my-dashboard.example.com/api/services',
+    apiKey: process.env.REGISTRY_API_KEY,
+    heartbeatInterval: 30000,
+  },
+});
+```
+
+### 2) Custom Registry (`registry.handler`)
+
+Use your own storage/transport (DB, API, queue, Redis client, etc.):
+
+```typescript
+await katax.init({
+  registry: {
+    heartbeatInterval: 30000,
+    handler: {
+      register: async (info) => {
+        await myDb.insert('services', info);
+      },
+      heartbeat: async (info) => {
+        await myDb.update(
+          'services',
+          { name: info.name, pid: info.pid },
+          { uptime: info.uptime, ts: Date.now() }
+        );
+      },
+      unregister: async (payload) => {
+        await myDb.delete('services', { name: payload.name, pid: payload.pid });
+      },
+    },
+  },
+});
+```
+
+### Optional Redis helpers (legacy/advanced)
+
+`registerVersionToRedis`, `registerProjectInRedis`, and `startHeartbeat` are optional helpers for Redis-centric dashboards. They are not required when using `registry.url` or `registry.handler`.
 
 ---
 
@@ -803,17 +869,29 @@ await katax.database({ name: 'rate-limit', type: 'redis', connection: { db: 2 } 
 
 ### Katax Class
 
+#### `new Katax()`
+Create an isolated Katax instance (useful for tests or multiple contexts in one process).
+
 #### `getInstance(): Katax`
 Get the singleton instance.
 
-#### `database(config: DatabaseConfig): Promise<IDatabaseService>`
+#### `init(config?: KataxInitConfig): Promise<Katax>`
+Initialize config/logger/cron and optional registry integration.
+
+- **Supports**:
+  - `hooks`: `beforeInit`, `afterInit`, `beforeShutdown`, `afterShutdown`, `onError`
+  - `registry.url`: HTTP registry mode
+  - `registry.handler`: custom callback mode (`register`, `heartbeat`, `unregister`)
+
+#### `database(config: DatabaseConfig): Promise<IDatabaseService | null>`
 Create or retrieve a database connection.
 
 - **Parameters**:
-  - `config.name`: Optional connection name (default: 'default')
+  - `config.name`: Required connection name
   - `config.type`: `'postgresql' | 'mysql' | 'mongodb' | 'redis'`
   - `config.connection`: Connection options or string
   - `config.pool`: Optional pool configuration
+  - `config.required`: Optional (default `true`), returns `null` on failure when `false`
 
 - **Returns**: Database service instance
 
@@ -821,9 +899,12 @@ Create or retrieve a database connection.
 Create or retrieve a WebSocket server.
 
 - **Parameters**:
-  - `config.name`: Optional server name (default: 'default')
+  - `config.name`: Required server name
   - `config.port`: Port number
-  - `config.path`: Optional path (default: '/socket.io')
+  - `config.httpServer`: Optional existing HTTP server for shared-port mode
+  - `config.cors`: Optional CORS config (in production, default is restrictive)
+  - `config.enableAuth`: Optional auth enable flag
+  - `config.authToken` / `config.authValidator`: Required when `enableAuth` is `true`
 
 - **Returns**: WebSocket service instance
 
@@ -850,6 +931,14 @@ Add a cron job.
 #### `shutdown(): Promise<void>`
 Close all connections and stop all jobs.
 
+### Optional Redis Registration Utilities
+
+- `registerVersionToRedis(db, opts)`
+- `registerProjectInRedis(db, opts)`
+- `startHeartbeat(db, opts, socket?)`
+
+These helpers are optional and intended for Redis-native service discovery/presence. Prefer `registry.url` or `registry.handler` for the main registry flow.
+
 ### CacheService API
 
 | Method | Parameters | Returns | Description |
@@ -857,16 +946,16 @@ Close all connections and stop all jobs.
 | `get<T>` | `key: string` | `Promise<T \| null>` | Get value with automatic JSON deserialization |
 | `set` | `key: string, value: unknown, ttl?: number` | `Promise<void>` | Set value with optional TTL (seconds) |
 | `del` | `key: string` | `Promise<void>` | Delete single key |
-| `delMany` | `keys: string[]` | `Promise<number>` | Delete multiple keys, returns count |
+| `delMany` | `keys: string[]` | `Promise<void>` | Delete multiple keys |
 | `exists` | `key: string` | `Promise<boolean>` | Check if key exists |
 | `ttl` | `key: string` | `Promise<number>` | Get TTL in seconds |
-| `expire` | `key: string, seconds: number` | `Promise<void>` | Set expiration on existing key |
+| `expire` | `key: string, seconds: number` | `Promise<boolean>` | Set expiration on existing key |
 | `incr` | `key: string` | `Promise<number>` | Increment by 1, returns new value |
 | `incrBy` | `key: string, n: number` | `Promise<number>` | Increment by N, returns new value |
 | `decr` | `key: string` | `Promise<number>` | Decrement by 1, returns new value |
 | `mget<T>` | `keys: string[]` | `Promise<(T \| null)[]>` | Get multiple keys |
-| `mset` | `entries: Record<string, unknown>` | `Promise<void>` | Set multiple keys |
-| `clear` | `pattern: string` | `Promise<void>` | Delete keys matching pattern |
+| `mset` | `entries: [string, unknown][]` | `Promise<void>` | Set multiple keys |
+| `clear` | `pattern: string` | `Promise<number>` | Delete keys matching pattern |
 | `stats` | - | `Promise<Record<string, string>>` | Get Redis INFO statistics |
 
 ### ConfigService

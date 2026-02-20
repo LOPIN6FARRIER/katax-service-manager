@@ -9,8 +9,11 @@ export { Katax, katax } from './katax.js';
 export type {
   KataxConfig,
   KataxInitConfig,
+  KataxLifecycleHooks,
   HealthCheckResult,
   RegistryConfig,
+  RegistryHandler,
+  RegistryUnregisterPayload,
   ServiceInfo,
   LoggerConfig,
   LogMessage,
@@ -40,4 +43,8 @@ export { CacheService } from './services/cache.service.js';
 export { RegistryService } from './services/registry.service.js';
 export { RedisTransport } from './services/transports/redis.transport.js';
 export { CallbackTransport } from './services/transports/callback.transport.js';
-export { registerVersionToRedis, startHeartbeat, registerProjectInRedis } from './utils/registration.js';
+export {
+  registerVersionToRedis,
+  startHeartbeat,
+  registerProjectInRedis,
+} from './utils/registration.js';

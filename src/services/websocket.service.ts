@@ -31,10 +31,18 @@ export class WebSocketService implements IWebSocketService {
     }
 
     try {
-      const corsConfig = this.config.cors ?? {
-        origin: '*',
-        credentials: false,
-      };
+      const isProd = process.env['NODE_ENV']?.toLowerCase() === 'production';
+      const corsConfig =
+        this.config.cors ??
+        (isProd
+          ? {
+              origin: false,
+              credentials: false,
+            }
+          : {
+              origin: '*',
+              credentials: false,
+            });
 
       // Mode 1: Attached to existing HTTP server (same port as Express)
       if (this.config.httpServer) {
@@ -53,14 +61,34 @@ export class WebSocketService implements IWebSocketService {
       }
 
       // Handle authentication if enabled
-      if (this.config.enableAuth && this.config.authToken) {
+      if (this.config.enableAuth) {
+        if (!this.config.authToken && !this.config.authValidator) {
+          throw new Error(
+            'WebSocket authentication is enabled but no authToken or authValidator was provided'
+          );
+        }
+
         this.io.use((socket, next) => {
           const token = socket.handshake.auth['token'] as string | undefined;
-          if (token === this.config.authToken) {
-            next();
-          } else {
-            next(new Error('Authentication failed'));
-          }
+          Promise.resolve(
+            this.config.authValidator
+              ? this.config.authValidator(token)
+              : token === this.config.authToken
+          )
+            .then((isAuthorized) => {
+              if (isAuthorized) {
+                next();
+              } else {
+                next(new Error('Authentication failed'));
+              }
+            })
+            .catch((error) => {
+              next(
+                new Error(
+                  `Authentication validator error: ${error instanceof Error ? error.message : String(error)}`
+                )
+              );
+            });
         });
       }
 

@@ -1,10 +1,11 @@
-import { ConfigService } from './services/config.service.js';
 import { LoggerService } from './services/logger.service.js';
 import { DatabaseService } from './services/database.service.js';
 import { WebSocketService } from './services/websocket.service.js';
-import { CronService } from './services/cron.service.js';
 import { CacheService } from './services/cache.service.js';
 import { RegistryService } from './services/registry.service.js';
+import { BootstrapService } from './services/bootstrap.service.js';
+import { HealthService } from './services/health.service.js';
+import { LifecycleService } from './services/lifecycle.service.js';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import type {
@@ -17,6 +18,7 @@ import type {
   DatabaseConfig,
   WebSocketConfig,
   KataxInitConfig,
+  KataxLifecycleHooks,
   HealthCheckResult,
   ServiceInfo,
 } from './types.js';
@@ -62,12 +64,21 @@ export class Katax {
 
   // Cache instances (reused)
   private _cacheInstances: Map<string, CacheService> = new Map();
+  private _overrides: Map<string, unknown> = new Map();
+  private _hooks: KataxLifecycleHooks | null = null;
+  private readonly _bootstrapService = new BootstrapService();
+  private readonly _healthService = new HealthService();
+  private readonly _lifecycleService = new LifecycleService();
 
   /**
-   * Private constructor to enforce singleton pattern
+   * Creates a Katax instance (instantiable mode)
    * Does NOT initialize services - call init() first
+   *
+   * @example
+   * const katax = new Katax();
+   * await katax.init();
    */
-  private constructor() {
+  public constructor() {
     // Load package.json info immediately
     this.loadPackageJson();
   }
@@ -130,23 +141,15 @@ export class Katax {
       return this;
     }
 
-    this._config = new ConfigService();
-    this._logger = new LoggerService(config?.logger);
-    // Determine app name with priority: explicit config, env KATAX_APP_NAME, npm_package_name, package.json
-    const explicitAppName = config?.appName;
-    const envApp = process.env['KATAX_APP_NAME'] ?? process.env['npm_package_name'];
-    const detectedAppName = explicitAppName ?? envApp ?? this._appName ?? undefined;
-    if (detectedAppName) {
-      try {
-        this._logger.setAppName(detectedAppName);
-        // also update internal app name so katax.appName reflects final value
-        this._appName = detectedAppName;
-      } catch {
-        // ignore failures setting app name on logger
-      }
-    }
-    this._cronService = new CronService();
-    await this._cronService.init();
+    this._hooks = config?.hooks ?? null;
+    await this._hooks?.beforeInit?.();
+
+    const bootstrapResult = await this._bootstrapService.initialize(config, this._appName);
+    this._config = bootstrapResult.config;
+    this._logger = bootstrapResult.logger;
+    this._cronService = bootstrapResult.cronService;
+    this._appName = bootstrapResult.resolvedAppName;
+
     this._initialized = true;
 
     this._logger.info({ message: 'Katax initialized (config, logger, cron ready)' });
@@ -162,8 +165,11 @@ export class Katax {
           message: 'Failed to register with registry, continuing without it',
           err: error,
         });
+        await this._hooks?.onError?.('registry.register', error);
       }
     }
+
+    await this._hooks?.afterInit?.();
 
     return this;
   }
@@ -189,6 +195,36 @@ export class Katax {
       Katax.instance = new Katax();
     }
     return Katax.instance;
+  }
+
+  /**
+   * Override an internal service by key (useful for tests/mocks)
+   *
+   * Supported keys examples:
+   * - 'config'
+   * - 'logger'
+   * - 'cron'
+   * - 'db:main'
+   * - 'ws:events'
+   * - 'cache:cache'
+   */
+  public overrideService<T>(key: string, service: T): void {
+    this._overrides.set(key, service);
+  }
+
+  /**
+   * Remove a specific override, or all overrides if no key is provided
+   */
+  public clearOverride(key?: string): void {
+    if (key) {
+      this._overrides.delete(key);
+      return;
+    }
+    this._overrides.clear();
+  }
+
+  private getOverride<T>(key: string): T | undefined {
+    return this._overrides.get(key) as T | undefined;
   }
 
   /**
@@ -222,6 +258,14 @@ export class Katax {
     // Validate name is provided
     if (!config.name) {
       throw new Error('Database name is required');
+    }
+
+    const dbOverride = this.getOverride<IDatabaseService>(`db:${config.name}`);
+    if (dbOverride) {
+      this._logger!.debug({
+        message: `Database '${config.name}' override found, returning mocked instance`,
+      });
+      return dbOverride;
     }
 
     // Check if database with this name already exists
@@ -306,6 +350,14 @@ export class Katax {
       throw new Error('WebSocket name is required');
     }
 
+    const socketOverride = this.getOverride<IWebSocketService>(`ws:${config.name}`);
+    if (socketOverride) {
+      this._logger!.debug({
+        message: `WebSocket '${config.name}' override found, returning mocked instance`,
+      });
+      return socketOverride;
+    }
+
     // Check if socket with this name already exists
     if (this._sockets.has(config.name)) {
       this._logger!.debug({
@@ -381,6 +433,10 @@ export class Katax {
    */
   public get config(): IConfigService {
     this.ensureInitialized();
+    const configOverride = this.getOverride<IConfigService>('config');
+    if (configOverride) {
+      return configOverride;
+    }
     return this._config!;
   }
 
@@ -390,6 +446,10 @@ export class Katax {
    */
   public get logger(): ILoggerService {
     this.ensureInitialized();
+    const loggerOverride = this.getOverride<ILoggerService>('logger');
+    if (loggerOverride) {
+      return loggerOverride;
+    }
     return this._logger!;
   }
 
@@ -400,6 +460,10 @@ export class Katax {
    */
   public get cronService(): ICronService {
     this.ensureInitialized();
+    const cronOverride = this.getOverride<ICronService>('cron');
+    if (cronOverride) {
+      return cronOverride;
+    }
     return this._cronService!;
   }
 
@@ -420,6 +484,10 @@ export class Katax {
    */
   public db(name: string): IDatabaseService {
     this.ensureInitialized();
+    const dbOverride = this.getOverride<IDatabaseService>(`db:${name}`);
+    if (dbOverride) {
+      return dbOverride;
+    }
     const db = this._databases.get(name);
     if (!db) {
       throw new Error(
@@ -438,6 +506,10 @@ export class Katax {
    */
   public ws(name: string): IWebSocketService {
     this.ensureInitialized();
+    const wsOverride = this.getOverride<IWebSocketService>(`ws:${name}`);
+    if (wsOverride) {
+      return wsOverride;
+    }
     const socket = this._sockets.get(name);
     if (!socket) {
       throw new Error(
@@ -483,6 +555,11 @@ export class Katax {
    */
   public cache(redisName: string = 'cache'): CacheService {
     this.ensureInitialized();
+
+    const cacheOverride = this.getOverride<CacheService>(`cache:${redisName}`);
+    if (cacheOverride) {
+      return cacheOverride;
+    }
 
     // Return cached instance if exists
     if (this._cacheInstances.has(redisName)) {
@@ -637,74 +714,7 @@ export class Katax {
    */
   public async healthCheck(): Promise<HealthCheckResult> {
     this.ensureInitialized();
-
-    const result: HealthCheckResult = {
-      status: 'healthy',
-      services: {
-        databases: {},
-        sockets: {},
-        cron: true,
-      },
-      timestamp: Date.now(),
-    };
-
-    // Check all databases
-    for (const [name, db] of this._databases) {
-      try {
-        // Try a simple query to verify connection
-        if (db.config?.type === 'redis') {
-          await db.redis?.('PING');
-        } else if (db.config?.type === 'mongodb') {
-          // MongoDB client ping
-          const client = await db.getClient();
-          await (client as { db: () => { command: (cmd: object) => Promise<unknown> } })
-            .db()
-            .command({ ping: 1 });
-        } else {
-          // SQL databases
-          await db.query('SELECT 1');
-        }
-        result.services.databases[name] = true;
-      } catch {
-        result.services.databases[name] = false;
-        result.status = 'degraded';
-      }
-    }
-
-    // Check all sockets (just verify they're initialized)
-    for (const [name, socket] of this._sockets) {
-      try {
-        const server = (socket as { getServer?: () => unknown }).getServer?.();
-        result.services.sockets[name] = server !== null;
-      } catch {
-        result.services.sockets[name] = false;
-        result.status = 'degraded';
-      }
-    }
-
-    // Check cron service
-    try {
-      this._cronService!.getJobs();
-      result.services.cron = true;
-    } catch {
-      result.services.cron = false;
-      result.status = 'degraded';
-    }
-
-    // If any database is down, mark as degraded
-    const allDbsHealthy = Object.values(result.services.databases).every((v) => v);
-    const allSocketsHealthy = Object.values(result.services.sockets).every((v) => v);
-
-    if (!allDbsHealthy || !allSocketsHealthy || !result.services.cron) {
-      result.status = 'degraded';
-    }
-
-    // If NO databases are healthy and there are databases configured, mark unhealthy
-    if (this._databases.size > 0 && !Object.values(result.services.databases).some((v) => v)) {
-      result.status = 'unhealthy';
-    }
-
-    return result;
+    return this._healthService.check(this._databases, this._sockets, this._cronService!);
   }
 
   /**
@@ -716,79 +726,17 @@ export class Katax {
       return;
     }
 
-    this._logger!.info({ message: 'Shutting down Katax services...' });
-    const errors: Array<{ service: string; error: unknown }> = [];
-
-    // Close all database connections in parallel
-    if (this._databases.size > 0) {
-      this._logger!.info({ message: `Closing ${this._databases.size} database connection(s)...` });
-      const dbCloseResults = await Promise.allSettled(
-        Array.from(this._databases.entries()).map(async ([name, db]) => {
-          await db.close();
-          return name;
-        })
-      );
-
-      for (const result of dbCloseResults) {
-        if (result.status === 'fulfilled') {
-          this._logger!.info({ message: `Database '${result.value}' closed` });
-        } else {
-          this._logger!.error({ message: 'Failed to close database', err: result.reason });
-          errors.push({ service: 'database', error: result.reason });
-        }
-      }
-      this._databases.clear();
-    }
-
-    // Close all WebSocket servers in parallel
-    if (this._sockets.size > 0) {
-      this._logger!.info({ message: `Closing ${this._sockets.size} WebSocket server(s)...` });
-      const socketCloseResults = await Promise.allSettled(
-        Array.from(this._sockets.entries()).map(async ([name, socket]) => {
-          await socket.close();
-          return name;
-        })
-      );
-
-      for (const result of socketCloseResults) {
-        if (result.status === 'fulfilled') {
-          this._logger!.info({ message: `WebSocket '${result.value}' closed` });
-        } else {
-          this._logger!.error({ message: 'Failed to close WebSocket', err: result.reason });
-          errors.push({ service: 'websocket', error: result.reason });
-        }
-      }
-      this._sockets.clear();
-    }
-
-    // Stop all cron jobs (synchronous, no need for Promise.allSettled)
-    try {
-      this._cronService!.stopAll();
-      this._logger!.info({ message: 'Cron jobs stopped' });
-    } catch (error) {
-      this._logger!.error({ message: 'Failed to stop cron jobs', err: error });
-      errors.push({ service: 'cron', error });
-    }
-
-    // Unregister from registry
-    if (this._registry) {
-      try {
-        await this._registry.unregister();
-        this._logger!.info({ message: 'Unregistered from registry' });
-      } catch (error) {
-        this._logger!.error({ message: 'Failed to unregister from registry', err: error });
-        errors.push({ service: 'registry', error });
-      }
-      this._registry = null;
-    }
+    const shutdownResult = await this._lifecycleService.shutdown({
+      logger: this._logger!,
+      databases: this._databases,
+      sockets: this._sockets,
+      cronService: this._cronService!,
+      registry: this._registry,
+      hooks: this._hooks,
+    });
+    this._registry = shutdownResult.registry;
 
     this._initialized = false;
-
-    if (errors.length > 0) {
-      this._logger!.warn({ message: `Shutdown completed with ${errors.length} error(s)` });
-    } else {
-      this._logger!.info({ message: '✓ Katax services shutdown complete' });
-    }
   }
 
   /**
@@ -802,6 +750,8 @@ export class Katax {
       Katax.instance._logger = null;
       Katax.instance._cronService = null;
       Katax.instance._registry = null;
+      Katax.instance._hooks = null;
+      Katax.instance._overrides.clear();
       Katax.instance._databases.clear();
       Katax.instance._sockets.clear();
       Katax.instance._cacheInstances.clear();

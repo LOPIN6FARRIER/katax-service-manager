@@ -40,10 +40,33 @@ export interface KataxInitConfig {
   appName?: string;
 
   /**
+   * Lifecycle hooks for initialization and shutdown
+   */
+  hooks?: KataxLifecycleHooks;
+
+  /**
    * Registry/Dashboard configuration
    * When provided, katax will auto-register with your registry via HTTP
    */
   registry?: RegistryConfig;
+}
+
+/**
+ * Custom registry callbacks to integrate with any destination
+ * (API, database, queue, etc.)
+ */
+export interface RegistryHandler {
+  register?: (serviceInfo: ServiceInfo) => Promise<void>;
+  heartbeat?: (serviceInfo: ServiceInfo) => Promise<void>;
+  unregister?: (payload: RegistryUnregisterPayload) => Promise<void>;
+}
+
+export interface RegistryUnregisterPayload {
+  name: string;
+  version: string;
+  hostname: string;
+  pid: number;
+  timestamp: number;
 }
 
 /**
@@ -55,7 +78,12 @@ export interface RegistryConfig {
    * Base URL of the registry API
    * @example 'https://dashboard.example.com/api/services'
    */
-  url: string;
+  url?: string;
+
+  /**
+   * Custom registry callbacks for non-HTTP integrations
+   */
+  handler?: RegistryHandler;
 
   /**
    * API key for authentication
@@ -67,6 +95,24 @@ export interface RegistryConfig {
    * @default 30000 (30 seconds)
    */
   heartbeatInterval?: number;
+
+  /**
+   * Request timeout in milliseconds for registry HTTP calls
+   * @default 5000
+   */
+  requestTimeoutMs?: number;
+
+  /**
+   * Number of retry attempts for registry calls
+   * @default 2
+   */
+  retryAttempts?: number;
+
+  /**
+   * Base delay in milliseconds for exponential backoff retries
+   * @default 300
+   */
+  retryBaseDelayMs?: number;
 
   /**
    * Custom metadata to send with registration
@@ -320,6 +366,23 @@ export interface WebSocketConfig {
    * @default false
    */
   enableAuth?: boolean;
+
+  /**
+   * Optional custom authentication validator
+   * If provided, it will be used when enableAuth is true.
+   */
+  authValidator?: (token: string | undefined) => boolean | Promise<boolean>;
+}
+
+/**
+ * Katax lifecycle hooks
+ */
+export interface KataxLifecycleHooks {
+  beforeInit?: () => void | Promise<void>;
+  afterInit?: () => void | Promise<void>;
+  beforeShutdown?: () => void | Promise<void>;
+  afterShutdown?: () => void | Promise<void>;
+  onError?: (context: string, error: unknown) => void | Promise<void>;
 }
 
 /**
@@ -440,6 +503,11 @@ export interface ILoggerService {
    * Remove a transport by name
    */
   removeTransport(name: string): void;
+
+  /**
+   * Close all registered transports gracefully
+   */
+  closeTransports(): Promise<void>;
 
   /**
    * Set the application name that will be attached to logs

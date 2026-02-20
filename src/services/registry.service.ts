@@ -1,65 +1,13 @@
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import os from 'os';
+import type { RegistryConfig, RegistryUnregisterPayload, ServiceInfo } from '../types.js';
 
 /**
  * Registry Service
  * Registers service with a central registry/dashboard via HTTP
  * No external dependencies - uses native fetch()
  */
-
-export interface RegistryConfig {
-  /**
-   * Base URL of the registry/dashboard API
-   * @example 'https://dashboard.example.com/api/services'
-   */
-  url: string;
-
-  /**
-   * API key for authentication
-   */
-  apiKey?: string;
-
-  /**
-   * Heartbeat interval in milliseconds
-   * @default 30000 (30 seconds)
-   */
-  heartbeatInterval?: number;
-
-  /**
-   * Custom metadata to send with registration
-   */
-  metadata?: Record<string, unknown>;
-}
-
-export interface ServiceInfo {
-  /** App name from package.json */
-  name: string;
-  /** Version from package.json */
-  version: string;
-  /** Hostname of the server */
-  hostname: string;
-  /** Operating system platform */
-  platform: NodeJS.Platform;
-  /** OS architecture */
-  arch: string;
-  /** Node.js version */
-  nodeVersion: string;
-  /** Process ID */
-  pid: number;
-  /** Process uptime in seconds */
-  uptime: number;
-  /** Memory usage */
-  memory: {
-    rss: number;
-    heapTotal: number;
-    heapUsed: number;
-  };
-  /** Custom metadata */
-  metadata?: Record<string, unknown>;
-  /** Timestamp */
-  timestamp: number;
-}
 
 type Logger = {
   info: (msg: { message: string; [key: string]: unknown }) => void;
@@ -75,12 +23,27 @@ export class RegistryService {
   private registered = false;
 
   constructor(config: RegistryConfig, logger?: Logger) {
+    if (!config.url && !config.handler) {
+      throw new Error('RegistryService requires either config.url or config.handler');
+    }
+
     this.config = {
       heartbeatInterval: 30000,
+      requestTimeoutMs: 5000,
+      retryAttempts: 2,
+      retryBaseDelayMs: 300,
       ...config,
     };
     this.logger = logger ?? null;
     this.serviceInfo = this.readPackageJson();
+  }
+
+  private get hasHttpRegistry(): boolean {
+    return Boolean(this.config.url);
+  }
+
+  private get hasHeartbeatTarget(): boolean {
+    return this.hasHttpRegistry || Boolean(this.config.handler?.heartbeat);
   }
 
   /**
@@ -152,37 +115,99 @@ export class RegistryService {
     return headers;
   }
 
+  private async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async fetchWithRetry(url: string, body: unknown): Promise<Response> {
+    const attempts = Math.max(0, this.config.retryAttempts ?? 2) + 1;
+    const baseDelay = Math.max(0, this.config.retryBaseDelayMs ?? 300);
+    const timeoutMs = Math.max(1000, this.config.requestTimeoutMs ?? 5000);
+
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: this.getHeaders(),
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return response;
+      } catch (error) {
+        lastError = error;
+        if (attempt < attempts) {
+          const jitter = Math.floor(Math.random() * 100);
+          const delay = baseDelay * 2 ** (attempt - 1) + jitter;
+          await this.sleep(delay);
+        }
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  private async executeAction(
+    action: 'register' | 'heartbeat' | 'unregister',
+    body: ServiceInfo | RegistryUnregisterPayload
+  ): Promise<void> {
+    if (action === 'register' && this.config.handler?.register) {
+      await this.config.handler.register(body as ServiceInfo);
+      return;
+    }
+
+    if (action === 'heartbeat' && this.config.handler?.heartbeat) {
+      await this.config.handler.heartbeat(body as ServiceInfo);
+      return;
+    }
+
+    if (action === 'unregister' && this.config.handler?.unregister) {
+      await this.config.handler.unregister(body as RegistryUnregisterPayload);
+      return;
+    }
+
+    if (!this.config.url) {
+      throw new Error(`Registry action '${action}' has no handler and no url configured`);
+    }
+
+    await this.fetchWithRetry(`${this.config.url}/${action}`, body);
+  }
+
   /**
    * Register this service with the registry
    */
   public async register(): Promise<void> {
     const info = this.getServiceInfo();
-    const url = `${this.config.url}/register`;
 
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify(info),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+      await this.executeAction('register', info);
 
       this.registered = true;
       this.logger?.info({
         message: `Service registered: ${info.name}@${info.version}`,
         hostname: info.hostname,
-        registry: this.config.url,
+        registry: this.config.url ?? 'custom-handler',
       });
 
       // Start heartbeat after successful registration
-      this.startHeartbeat();
+      if (this.hasHeartbeatTarget) {
+        this.startHeartbeat();
+      }
     } catch (error) {
       this.logger?.error({
         message: 'Failed to register with registry',
-        url,
+        url: this.config.url,
         err: error,
       });
       throw error;
@@ -194,21 +219,9 @@ export class RegistryService {
    */
   private async sendHeartbeat(): Promise<void> {
     const info = this.getServiceInfo();
-    const url = `${this.config.url}/heartbeat`;
 
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify(info),
-      });
-
-      if (!response.ok) {
-        this.logger?.warn({
-          message: `Heartbeat failed: HTTP ${response.status}`,
-          url,
-        });
-      }
+      await this.executeAction('heartbeat', info);
     } catch (error) {
       this.logger?.warn({
         message: 'Heartbeat failed',
@@ -259,19 +272,14 @@ export class RegistryService {
     }
 
     const info = this.getServiceInfo();
-    const url = `${this.config.url}/unregister`;
 
     try {
-      await fetch(url, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({
-          name: info.name,
-          version: info.version,
-          hostname: info.hostname,
-          pid: info.pid,
-          timestamp: Date.now(),
-        }),
+      await this.executeAction('unregister', {
+        name: info.name,
+        version: info.version,
+        hostname: info.hostname,
+        pid: info.pid,
+        timestamp: Date.now(),
       });
 
       this.logger?.info({ message: 'Service unregistered from registry' });
