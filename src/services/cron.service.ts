@@ -56,6 +56,15 @@ export class CronService implements ICronService {
   private jobs: Map<string, JobState> = new Map();
   private initialized = false;
 
+  private async runOnInitJob(name: string, jobState: JobState): Promise<void> {
+    logger.info({ job: name }, 'Running job on init');
+    try {
+      await Promise.resolve(jobState.config.task());
+    } catch (error) {
+      logger.error({ job: name, err: error }, 'Error running job on init');
+    }
+  }
+
   /**
    * Initialize the cron service
    * Starts all enabled jobs and optionally runs those with runOnInit=true
@@ -79,12 +88,7 @@ export class CronService implements ICronService {
       const isEnabled = this.isJobEnabled(jobState.config);
 
       if (isEnabled && jobState.config.runOnInit === true) {
-        logger.info({ job: name }, 'Running job on init');
-        try {
-          await Promise.resolve(jobState.config.task());
-        } catch (error) {
-          logger.error({ job: name, err: error }, 'Error running job on init');
-        }
+        await this.runOnInitJob(name, jobState);
       }
     }
 
@@ -116,6 +120,11 @@ export class CronService implements ICronService {
     // If service is initialized and job is enabled, start it immediately
     if (this.initialized && this.isJobEnabled(job)) {
       this.startJobInternal(job.name, jobState);
+
+      // If requested, also run once immediately for dynamic jobs
+      if (job.runOnInit === true) {
+        void this.runOnInitJob(job.name, jobState);
+      }
     }
   }
 

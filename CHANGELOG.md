@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.4] - 2026-02-21
+### Fixed
+- `CronService`: `runOnInit` now also executes for jobs added dynamically after `init()` via `addJob()` / `katax.cron(...)`.
+
 ## [0.2.0] - 2026-02-15
 ### Added
 - `LogTransport` interface for pluggable log transports.
