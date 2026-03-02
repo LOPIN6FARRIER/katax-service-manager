@@ -43,6 +43,8 @@ export { CacheService } from './services/cache.service.js';
 export { RegistryService } from './services/registry.service.js';
 export { RedisTransport } from './services/transports/redis.transport.js';
 export { CallbackTransport } from './services/transports/callback.transport.js';
+export { TelegramTransport } from './services/transports/telegram.transport.js';
+export type { TelegramTransportOptions } from './services/transports/telegram.transport.js';
 export {
   registerVersionToRedis,
   startHeartbeat,
