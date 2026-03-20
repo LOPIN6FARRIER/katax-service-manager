@@ -17,18 +17,18 @@ export class BootstrapService {
     existingLogger?: ILoggerService
   ): Promise<BootstrapResult> {
     const config = new ConfigService();
-    
+
     // Reuse existing logger if provided, otherwise create new one
     let logger: ILoggerService;
-    
+
     if (existingLogger) {
       logger = existingLogger;
-      
+
       // Warn if user tries to reconfigure an already-used logger
       if (initConfig?.logger) {
         console.warn(
           '[Katax] Logger config ignored - logger was already used before init(). ' +
-          'To customize logger config, call init() before using logger.'
+            'To customize logger config, call init() before using logger.'
         );
       }
     } else {

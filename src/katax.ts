@@ -6,7 +6,10 @@ import { RegistryService } from './services/registry.service.js';
 import { BootstrapService } from './services/bootstrap.service.js';
 import { HealthService } from './services/health.service.js';
 import { LifecycleService } from './services/lifecycle.service.js';
-import { RedisStreamBridgeService, type RedisStreamBridgeConfig } from './services/redis-stream-bridge.service.js';
+import {
+  RedisStreamBridgeService,
+  type RedisStreamBridgeConfig,
+} from './services/redis-stream-bridge.service.js';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import type {
@@ -661,9 +664,7 @@ export class Katax {
 
     const socket = this._sockets.get(socketName);
     if (!socket) {
-      throw new Error(
-        `WebSocket '${socketName}' not found. Create it first using katax.socket()`
-      );
+      throw new Error(`WebSocket '${socketName}' not found. Create it first using katax.socket()`);
     }
 
     const bridge = new RedisStreamBridgeService(redis, socket, config);

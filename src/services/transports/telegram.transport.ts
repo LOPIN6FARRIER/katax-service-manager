@@ -72,17 +72,17 @@ export class TelegramTransport implements LogTransport {
   /**
    * Custom filter function (can be overridden by user)
    * If returns false, the log will NOT be sent to Telegram
-   * 
+   *
    * @example
    * ```typescript
    * telegramTransport.filter = (log) => {
    *   // Don't send if marked with skipTelegram
    *   if ((log as any).skipTelegram) return false;
-   *   
+   *
    *   // Don't send specific error types
    *   const message = String((log as any).message ?? '');
    *   if (message.includes('not found')) return false;
-   *   
+   *
    *   return true; // Send everything else
    * };
    * ```
@@ -148,13 +148,13 @@ export class TelegramTransport implements LogTransport {
       level: __,
       persist,
       appName: ___,
-      timestamp: ____,      // ← Filtrar timestamp
-      skipTransport,        // ← Filtrar flags internos
+      timestamp: ____, // ← Filtrar timestamp
+      skipTransport, // ← Filtrar flags internos
       skipTelegram,
       skipRedis,
       ...metadata
     } = log as any;
-    
+
     // Solo mostrar metadata si hay propiedades útiles
     if (Object.keys(metadata).length > 0) {
       const metaStr = JSON.stringify(metadata, null, 2);
@@ -163,7 +163,7 @@ export class TelegramTransport implements LogTransport {
 
     // Timestamp (mostrar fecha/hora legible, no el número)
     const logTimestamp = (log as any).timestamp;
-    const timestamp = logTimestamp 
+    const timestamp = logTimestamp
       ? new Date(logTimestamp).toLocaleString('es-ES', { timeZone: 'America/Mexico_City' })
       : new Date().toLocaleString('es-ES', { timeZone: 'America/Mexico_City' });
     formatted += `\n\n🕐 ${timestamp}`;

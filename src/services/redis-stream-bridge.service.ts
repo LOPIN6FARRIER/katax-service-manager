@@ -38,13 +38,13 @@ export interface RedisStreamBridgeConfig {
 
 /**
  * Redis Stream Bridge Service
- * 
+ *
  * Reads logs from a Redis Stream and broadcasts them via WebSocket.
  * Supports:
  * - Real-time log streaming to dashboard
  * - Project-specific subscriptions (rooms)
  * - Historical log retrieval
- * 
+ *
  * @example
  * const bridge = new RedisStreamBridgeService(redisDb, socket, {
  *   appName: 'trade-alerts',
@@ -106,9 +106,9 @@ export class RedisStreamBridgeService {
     for (let i = 0; i < fields.length; i += 2) {
       const key = fields[i];
       const value = fields[i + 1];
-      
+
       if (!key) continue; // Skip if key is undefined
-      
+
       try {
         obj[key] = value ? JSON.parse(value) : value;
       } catch {
@@ -131,9 +131,9 @@ export class RedisStreamBridgeService {
           this.group,
           this.consumer,
           'BLOCK',
-          this.blockTimeout,
+          String(this.blockTimeout), // ← Convert to string for Redis
           'COUNT',
-          this.batchSize,
+          String(this.batchSize),    // ← Convert to string for Redis
           'STREAMS',
           this.streamKey,
           '>'
@@ -191,14 +191,7 @@ export class RedisStreamBridgeService {
       socket.on('subscribe-project', async (appName: string) => {
         try {
           // Fetch recent logs for this project (last 100)
-          const range = await this.redis.redis!(
-            'XRANGE',
-            this.streamKey,
-            '-',
-            '+',
-            'COUNT',
-            '100'
-          );
+          const range = await this.redis.redis!('XRANGE', this.streamKey, '-', '+', 'COUNT', '100');
 
           if (!range) return;
 
@@ -249,7 +242,7 @@ export class RedisStreamBridgeService {
     this.running = true;
     await this.ensureGroup();
     this.attachSocketHandlers();
-    
+
     // Start the loop (don't await, it runs in background)
     void this.loop();
   }

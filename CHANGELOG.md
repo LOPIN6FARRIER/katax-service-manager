@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.1] - 2026-03-20
+### Fixed
+- **RedisTransport**: Convert numeric values to strings for Redis v5+ compatibility
+  - Fixed `Date.now()` timestamp conversion (was passing number, now string)
+  - Ensures compatibility with stricter Redis client v5.x argument validation
+- **RedisStreamBridgeService**: Convert `blockTimeout` and `batchSize` to strings for XREADGROUP
+  - Redis v5+ requires all command arguments to be strings or Buffers
+  - Previous versions (v4.x) were more tolerant and auto-converted numbers
+
 ## [0.4.0] - 2026-03-20
 ### Added
 - `RedisStreamBridgeService`: New service for Redis Stream to WebSocket bridging.

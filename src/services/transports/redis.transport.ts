@@ -32,12 +32,12 @@ export class RedisTransport implements LogTransport {
     const app =
       (log as any)['appName'] ?? (metadata as any)['appName'] ?? (metadata as any)['app'] ?? null;
 
-    const fields: (string | number)[] = [];
+    const fields: string[] = [];
     fields.push('level', ((metadata as any)['level'] as string) ?? 'info');
     fields.push('msg', typeof message === 'string' ? message : JSON.stringify(message));
     if (app) fields.push('app', String(app));
     fields.push('meta', JSON.stringify(metadata ?? {}));
-    fields.push('timestamp', Date.now());
+    fields.push('timestamp', String(Date.now())); // ← Convert to string for Redis
 
     // XADD <stream> * field value [field value ...]
     await this.db.redis!('XADD', this.streamKey, '*', ...fields);
