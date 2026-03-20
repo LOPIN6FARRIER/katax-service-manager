@@ -13,10 +13,27 @@ export interface BootstrapResult {
 export class BootstrapService {
   public async initialize(
     initConfig?: KataxInitConfig,
-    fallbackAppName?: string
+    fallbackAppName?: string,
+    existingLogger?: ILoggerService
   ): Promise<BootstrapResult> {
     const config = new ConfigService();
-    const logger = new LoggerService(initConfig?.logger);
+    
+    // Reuse existing logger if provided, otherwise create new one
+    let logger: ILoggerService;
+    
+    if (existingLogger) {
+      logger = existingLogger;
+      
+      // Warn if user tries to reconfigure an already-used logger
+      if (initConfig?.logger) {
+        console.warn(
+          '[Katax] Logger config ignored - logger was already used before init(). ' +
+          'To customize logger config, call init() before using logger.'
+        );
+      }
+    } else {
+      logger = new LoggerService(initConfig?.logger);
+    }
 
     const explicitAppName = initConfig?.appName;
     const envAppName = process.env['KATAX_APP_NAME'] ?? process.env['npm_package_name'];

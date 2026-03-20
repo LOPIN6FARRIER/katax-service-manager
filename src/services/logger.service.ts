@@ -229,9 +229,9 @@ export class LoggerService implements ILoggerService {
     // Attach level, timestamp and appName
     const enriched: LogMessage = {
       ...log,
-      level,
+      level: level as 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal',
       timestamp: Date.now(),
-      appName: this.appName,
+      ...(this.appName && { appName: this.appName }),
     };
 
     const persistOverride = Object.prototype.hasOwnProperty.call(enriched, 'persist')

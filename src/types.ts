@@ -411,27 +411,138 @@ export interface IConfigService {
 }
 
 /**
- * Log message configuration
+ * Extended log message with standard optional properties
  */
 export interface LogMessage {
   /**
-   * The log message
+   * The log message (required)
    */
   message: string;
 
+  // ========== WebSocket Broadcasting ==========
   /**
-   * Whether to broadcast this log to WebSocket
+   * Whether to broadcast this log to WebSocket clients
    * @default false
    */
   broadcast?: boolean;
 
   /**
    * Optional room to send the log to (requires broadcast: true)
+   * @example 'production', 'staging', 'my-app-name'
    */
   room?: string;
 
+  // ========== Transport Filtering ==========
   /**
-   * Any additional metadata to include in the log
+   * Persist this log (save to Redis/Database even if not an error)
+   * Useful for important info logs that should be stored
+   * @default false
+   */
+  persist?: boolean;
+
+  /**
+   * Skip ALL transports (Redis, Telegram, File, etc.)
+   * Useful for internal/debug logs that shouldn't be persisted or sent
+   * @default false
+   */
+  skipTransport?: boolean;
+
+  /**
+   * Skip only Telegram transport (but allow Redis and others)
+   * Useful for filtering spam/minor errors from Telegram notifications
+   * @default false
+   */
+  skipTelegram?: boolean;
+
+  /**
+   * Skip only Redis transport (but allow Telegram and others)
+   * Useful for logs that should alert but not be stored long-term
+   * @default false
+   */
+  skipRedis?: boolean;
+
+  // ========== Metadata (added automatically by logger) ==========
+  /**
+   * Log level (added automatically by logger)
+   * @internal
+   */
+  level?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+
+  /**
+   * Unix timestamp in milliseconds (added automatically by logger)
+   * @internal
+   */
+  timestamp?: number;
+
+  /**
+   * Application name (set via katax.logger.setAppName())
+   * Added automatically to all logs for multi-service environments
+   * @internal
+   */
+  appName?: string;
+
+  // ========== Common Error Properties ==========
+  /**
+   * Error message, Error object, or any error-related data
+   * @example 'Connection timeout', new Error('Failed'), { code: 'ECONNREFUSED' }
+   */
+  error?: string | Error | unknown;
+
+  /**
+   * Stack trace for debugging
+   * Usually extracted from Error objects automatically
+   */
+  stack?: string;
+
+  /**
+   * Error code for categorization
+   * @example 'ECONNREFUSED', 'AUTH_FAILED', 404
+   */
+  code?: string | number;
+
+  // ========== Common Context Properties ==========
+  /**
+   * User ID associated with this log
+   * Useful for tracking user-specific actions or errors
+   */
+  userId?: string | number;
+
+  /**
+   * Request ID for distributed tracing
+   * Helps correlate logs across multiple services
+   */
+  requestId?: string;
+
+  /**
+   * Duration in milliseconds (for performance logs)
+   * @example Log API response time, database query duration, etc.
+   */
+  duration?: number;
+
+  /**
+   * HTTP status code (for API logs)
+   */
+  statusCode?: number;
+
+  /**
+   * HTTP method (for API logs)
+   */
+  method?: string;
+
+  /**
+   * URL or endpoint path (for API logs)
+   */
+  path?: string;
+
+  /**
+   * IP address of client/user
+   */
+  ip?: string;
+
+  // ========== Additional metadata ==========
+  /**
+   * Any additional custom properties
+   * The logger is flexible and accepts any key-value pairs
    */
   [key: string]: unknown;
 }

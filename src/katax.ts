@@ -6,6 +6,7 @@ import { RegistryService } from './services/registry.service.js';
 import { BootstrapService } from './services/bootstrap.service.js';
 import { HealthService } from './services/health.service.js';
 import { LifecycleService } from './services/lifecycle.service.js';
+import { RedisStreamBridgeService, type RedisStreamBridgeConfig } from './services/redis-stream-bridge.service.js';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import type {
@@ -64,6 +65,7 @@ export class Katax {
 
   // Cache instances (reused)
   private _cacheInstances: Map<string, CacheService> = new Map();
+  private _bridges: Map<string, RedisStreamBridgeService> = new Map();
   private _overrides: Map<string, unknown> = new Map();
   private _hooks: KataxLifecycleHooks | null = null;
   private readonly _bootstrapService = new BootstrapService();
@@ -144,7 +146,12 @@ export class Katax {
     this._hooks = config?.hooks ?? null;
     await this._hooks?.beforeInit?.();
 
-    const bootstrapResult = await this._bootstrapService.initialize(config, this._appName);
+    // Pass existing logger to bootstrap so it's reused instead of replaced
+    const bootstrapResult = await this._bootstrapService.initialize(
+      config,
+      this._appName,
+      this._logger ?? undefined
+    );
     this._config = bootstrapResult.config;
     this._logger = bootstrapResult.logger;
     this._cronService = bootstrapResult.cronService;
@@ -442,15 +449,26 @@ export class Katax {
 
   /**
    * Get the logger service
-   * @throws Error if init() has not been called
+   * Logger is always available, even before init() for simple console logging
+   * Advanced features (broadcast, transports) require init()
    */
   public get logger(): ILoggerService {
-    this.ensureInitialized();
+    // Check for override first
     const loggerOverride = this.getOverride<ILoggerService>('logger');
     if (loggerOverride) {
       return loggerOverride;
     }
-    return this._logger!;
+
+    // Create default logger if not initialized yet (lazy initialization)
+    if (!this._logger) {
+      this._logger = new LoggerService({
+        level: 'info',
+        prettyPrint: this.isDev,
+        enableBroadcast: false, // No broadcast until init()
+      });
+    }
+
+    return this._logger;
   }
 
   /**
@@ -583,6 +601,74 @@ export class Katax {
     const cacheInstance = new CacheService(redis);
     this._cacheInstances.set(redisName, cacheInstance);
     return cacheInstance;
+  }
+
+  /**
+   * Create a Redis Stream Bridge for broadcasting logs from Redis to WebSocket
+   * Instances are cached and reused for the same configuration.
+   * Each bridge filters logs by appName to support multiple apps using the same Redis.
+   *
+   * @param redisName - Name of the Redis database connection (default: 'redis')
+   * @param socketName - Name of the WebSocket connection (default: 'main')
+   * @param config - Bridge configuration (appName is required)
+   * @returns RedisStreamBridgeService instance
+   *
+   * @example
+   * // Create bridge for trade-alerts app
+   * const bridge = katax.bridge('redis', 'main', {
+   *   appName: 'trade-alerts'
+   * });
+   * await bridge.start();
+   *
+   * @example
+   * // With custom configuration
+   * const bridge = katax.bridge('redis', 'main', {
+   *   appName: 'trade-alerts',
+   *   streamKey: 'katax:logs',
+   *   batchSize: 20
+   * });
+   * await bridge.start();
+   *
+   * // Stop when shutting down
+   * process.on('SIGTERM', () => bridge.stop());
+   */
+  public bridge(
+    redisName: string = 'redis',
+    socketName: string = 'main',
+    config: RedisStreamBridgeConfig
+  ): RedisStreamBridgeService {
+    this.ensureInitialized();
+
+    const bridgeKey = `${redisName}:${socketName}:${config.streamKey ?? 'katax:logs'}:${config.appName}`;
+
+    // Return cached instance if exists
+    if (this._bridges.has(bridgeKey)) {
+      return this._bridges.get(bridgeKey)!;
+    }
+
+    const redis = this._databases.get(redisName);
+    if (!redis) {
+      throw new Error(
+        `Redis connection '${redisName}' not found. Create it first using katax.database()`
+      );
+    }
+
+    if (redis.config?.type !== 'redis') {
+      throw new Error(
+        `Database '${redisName}' is not a Redis connection (type: ${redis.config?.type})`
+      );
+    }
+
+    const socket = this._sockets.get(socketName);
+    if (!socket) {
+      throw new Error(
+        `WebSocket '${socketName}' not found. Create it first using katax.socket()`
+      );
+    }
+
+    const bridge = new RedisStreamBridgeService(redis, socket, config);
+    this._bridges.set(bridgeKey, bridge);
+    return bridge;
   }
 
   /**
@@ -736,6 +822,16 @@ export class Katax {
     });
     this._registry = shutdownResult.registry;
 
+    // Stop all Redis Stream Bridges
+    for (const bridge of this._bridges.values()) {
+      try {
+        bridge.stop();
+      } catch (error) {
+        this._logger?.warn({ message: 'Failed to stop bridge', error });
+      }
+    }
+    this._bridges.clear();
+
     this._initialized = false;
   }
 
@@ -755,6 +851,7 @@ export class Katax {
       Katax.instance._databases.clear();
       Katax.instance._sockets.clear();
       Katax.instance._cacheInstances.clear();
+      Katax.instance._bridges.clear();
     }
     Katax.instance = null;
   }

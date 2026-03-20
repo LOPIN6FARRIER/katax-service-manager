@@ -47,7 +47,7 @@ export interface TelegramTransportOptions {
 
 /**
  * TelegramTransport - Envía logs a un chat/grupo de Telegram
- * 
+ *
  * @example
  * ```typescript
  * const telegramTransport = new TelegramTransport({
@@ -56,7 +56,7 @@ export interface TelegramTransportOptions {
  *   levels: ['error', 'fatal'],
  *   includePersist: true,
  * });
- * 
+ *
  * katax.logger.addTransport(telegramTransport);
  * ```
  */
@@ -68,6 +68,26 @@ export class TelegramTransport implements LogTransport {
   private readonly includePersist: boolean;
   private readonly parseMode: 'Markdown' | 'HTML';
   private readonly maxLength: number;
+
+  /**
+   * Custom filter function (can be overridden by user)
+   * If returns false, the log will NOT be sent to Telegram
+   * 
+   * @example
+   * ```typescript
+   * telegramTransport.filter = (log) => {
+   *   // Don't send if marked with skipTelegram
+   *   if ((log as any).skipTelegram) return false;
+   *   
+   *   // Don't send specific error types
+   *   const message = String((log as any).message ?? '');
+   *   if (message.includes('not found')) return false;
+   *   
+   *   return true; // Send everything else
+   * };
+   * ```
+   */
+  public filter?(log: LogMessage): boolean;
 
   constructor(options: TelegramTransportOptions) {
     this.botToken = options.botToken;
@@ -87,7 +107,7 @@ export class TelegramTransport implements LogTransport {
   }
 
   /**
-   * Filtra logs según nivel y flag persist
+   * Filtra logs según nivel y flag persist (default behavior)
    */
   private shouldSend(log: LogMessage): boolean {
     const level = String((log as any).level ?? 'info');
@@ -103,34 +123,49 @@ export class TelegramTransport implements LogTransport {
   private formatMessage(log: LogMessage): string {
     const level = String((log as any).level ?? 'info').toUpperCase();
     const appName = (log as any).appName ?? 'app';
-    const message = typeof log.message === 'string' 
-      ? log.message 
-      : JSON.stringify(log.message, null, 2);
+    const message =
+      typeof log.message === 'string' ? log.message : JSON.stringify(log.message, null, 2);
 
     // Emojis según nivel
-    const emoji = {
-      TRACE: '🔍',
-      DEBUG: '🐛',
-      INFO: 'ℹ️',
-      WARN: '⚠️',
-      ERROR: '🔥',
-      FATAL: '💀',
-    }[level] ?? '📝';
+    const emoji =
+      {
+        TRACE: '🔍',
+        DEBUG: '🐛',
+        INFO: 'ℹ️',
+        WARN: '⚠️',
+        ERROR: '🔥',
+        FATAL: '💀',
+      }[level] ?? '📝';
 
     // Formato básico
     let formatted = `${emoji} *${level}* - \`${appName}\`\n\n${message}`;
 
-    // Agregar metadata si existe
-    const { message: _, broadcast, room, level: __, persist, appName: ___, ...metadata } = log as any;
+    // Agregar metadata si existe (filtrar propiedades internas)
+    const {
+      message: _,
+      broadcast,
+      room,
+      level: __,
+      persist,
+      appName: ___,
+      timestamp: ____,      // ← Filtrar timestamp
+      skipTransport,        // ← Filtrar flags internos
+      skipTelegram,
+      skipRedis,
+      ...metadata
+    } = log as any;
+    
+    // Solo mostrar metadata si hay propiedades útiles
     if (Object.keys(metadata).length > 0) {
       const metaStr = JSON.stringify(metadata, null, 2);
-      formatted += `\n\n\`\`\`\n${metaStr}\n\`\`\``;
+      formatted += `\n\n\`\`\`json\n${metaStr}\n\`\`\``;
     }
 
-    // Timestamp
-    const timestamp = new Date().toLocaleString('es-ES', { 
-      timeZone: 'America/Mexico_City' 
-    });
+    // Timestamp (mostrar fecha/hora legible, no el número)
+    const logTimestamp = (log as any).timestamp;
+    const timestamp = logTimestamp 
+      ? new Date(logTimestamp).toLocaleString('es-ES', { timeZone: 'America/Mexico_City' })
+      : new Date().toLocaleString('es-ES', { timeZone: 'America/Mexico_City' });
     formatted += `\n\n🕐 ${timestamp}`;
 
     // Truncar si es muy largo
@@ -145,7 +180,13 @@ export class TelegramTransport implements LogTransport {
    * Envía el log a Telegram
    */
   public async send(log: LogMessage): Promise<void> {
+    // First check default filter (levels & persist)
     if (!this.shouldSend(log)) {
+      return;
+    }
+
+    // Then check custom filter if defined
+    if (this.filter && !this.filter(log)) {
       return;
     }
 
