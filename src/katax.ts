@@ -10,6 +10,7 @@ import {
   RedisStreamBridgeService,
   type RedisStreamBridgeConfig,
 } from './services/redis-stream-bridge.service.js';
+import { startHeartbeat } from './utils/registration.js';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import type {
@@ -69,8 +70,11 @@ export class Katax {
   // Cache instances (reused)
   private _cacheInstances: Map<string, CacheService> = new Map();
   private _bridges: Map<string, RedisStreamBridgeService> = new Map();
+  private _heartbeats: Array<{ stop: () => void }> = [];
   private _overrides: Map<string, unknown> = new Map();
   private _hooks: KataxLifecycleHooks | null = null;
+  private _shutdownHooks: Array<() => Promise<void> | void> = [];
+  private _processHandlersRegistered = false;
   private readonly _bootstrapService = new BootstrapService();
   private readonly _healthService = new HealthService();
   private readonly _lifecycleService = new LifecycleService();
@@ -119,8 +123,12 @@ export class Katax {
    * // Basic init
    * await katax.init();
    *
+   * // With auto-loading .env
+   * await katax.init({ loadEnv: true });
+   *
    * // With logger config
    * await katax.init({
+   *   loadEnv: true,
    *   logger: {
    *     level: 'debug',
    *     prettyPrint: true
@@ -146,6 +154,19 @@ export class Katax {
       return this;
     }
 
+    // Load .env if requested (before any env access)
+    if (config?.loadEnv) {
+      try {
+        // @ts-expect-error - dotenv is an optional peer dependency
+        const dotenv = await import('dotenv');
+        dotenv.config();
+      } catch (error) {
+        throw new Error(
+          'loadEnv: true requires "dotenv" to be installed.\n' + 'Run: npm install dotenv'
+        );
+      }
+    }
+
     this._hooks = config?.hooks ?? null;
     await this._hooks?.beforeInit?.();
 
@@ -163,6 +184,9 @@ export class Katax {
     this._initialized = true;
 
     this._logger.info({ message: 'Katax initialized (config, logger, cron ready)' });
+
+    // Register process signal handlers (SIGTERM, SIGINT)
+    this.registerProcessHandlers();
 
     // Register with registry if configured
     if (config?.registry) {
@@ -679,6 +703,66 @@ export class Katax {
     return this._initialized;
   }
 
+  /**
+   * Start a managed heartbeat that automatically stops on shutdown
+   *
+   * @param opts - Heartbeat configuration
+   * @param redisName - Name of the Redis database (default: 'redis')
+   * @param socketName - Optional name of WebSocket service for broadcasting heartbeats
+   * @returns Heartbeat controller with stop() method
+   *
+   * @example
+   * // Basic heartbeat
+   * katax.heartbeat({
+   *   app: katax.appName,
+   *   port: 3000,
+   * });
+   *
+   * // With WebSocket broadcasting
+   * katax.heartbeat({
+   *   app: katax.appName,
+   *   port: 3000,
+   *   version: katax.version,
+   * }, 'cache', 'main');
+   */
+  public heartbeat(
+    opts: {
+      app: string;
+      port?: number | string;
+      intervalMs?: number;
+      ttlSeconds?: number;
+      version?: string;
+    },
+    redisName: string = 'redis',
+    socketName?: string
+  ): { stop: () => void } {
+    this.ensureInitialized();
+
+    const redis = this._databases.get(redisName);
+    if (!redis) {
+      throw new Error(
+        `Redis connection '${redisName}' not found. Create it first using katax.database()`
+      );
+    }
+
+    if (redis.config?.type !== 'redis') {
+      throw new Error(
+        `Database '${redisName}' is not a Redis connection (type: ${redis.config?.type})`
+      );
+    }
+
+    const socket = socketName ? this._sockets.get(socketName) : undefined;
+    if (socketName && !socket) {
+      this._logger?.warn({
+        message: `WebSocket '${socketName}' not found. Heartbeat will run without broadcasting.`,
+      });
+    }
+
+    const hb = startHeartbeat(redis, opts, socket);
+    this._heartbeats.push(hb);
+    return hb;
+  }
+
   // ==================== APP INFO ====================
 
   /**
@@ -732,27 +816,35 @@ export class Katax {
 
   /**
    * Get an environment variable with optional default
+   * Type is inferred from the default value
+   *
    * @example
-   * katax.env('PORT') // '3000'
-   * katax.env('PORT', '8080') // '8080' if PORT not set
-   * katax.env('DEBUG', false) // false if DEBUG not set
+   * katax.env('PORT')              // string | ''
+   * katax.env('PORT', '8080')      // string (type: string)
+   * katax.env('PORT', 3000)        // number (type: number)
+   * katax.env('DEBUG', false)      // boolean (type: boolean)
    */
-  public env<T extends string | number | boolean = string>(key: string, defaultValue?: T): T {
+  public env(key: string): string;
+  public env(key: string, defaultValue: string): string;
+  public env(key: string, defaultValue: number): number;
+  public env(key: string, defaultValue: boolean): boolean;
+  public env(key: string, defaultValue?: string | number | boolean): string | number | boolean {
     const value = process.env[key];
 
     if (value === undefined) {
-      return (defaultValue ?? '') as T;
+      return defaultValue ?? '';
     }
 
-    // Try to parse to the expected type based on defaultValue
+    // Infer type from defaultValue
     if (typeof defaultValue === 'number') {
-      return Number(value) as T;
+      const parsed = Number(value);
+      return isNaN(parsed) ? defaultValue : parsed;
     }
     if (typeof defaultValue === 'boolean') {
-      return (value === 'true' || value === '1') as unknown as T;
+      return value === 'true' || value === '1';
     }
 
-    return value as T;
+    return value;
   }
 
   /**
@@ -805,12 +897,65 @@ export class Katax {
   }
 
   /**
+   * Register a shutdown hook to run custom cleanup logic
+   * Hooks are called before Katax tears down services
+   *
+   * @param fn - Async or sync function to run on shutdown
+   *
+   * @example
+   * katax.onShutdown(async () => {
+   *   await closeCustomConnection();
+   *   console.log('Custom cleanup done');
+   * });
+   */
+  public onShutdown(fn: () => Promise<void> | void): void {
+    this._shutdownHooks.push(fn);
+  }
+
+  /**
+   * Register process signal handlers for graceful shutdown
+   * Called automatically during init()
+   * @internal
+   */
+  private registerProcessHandlers(): void {
+    if (this._processHandlersRegistered) {
+      return;
+    }
+
+    const shutdown = async (signal: string) => {
+      this._logger?.info({ message: `Received ${signal}, shutting down gracefully...` });
+      await this.shutdown();
+      process.exit(0);
+    };
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
+
+    this._processHandlersRegistered = true;
+    this._logger?.debug({ message: 'Process signal handlers registered (SIGTERM, SIGINT)' });
+  }
+
+  /**
    * Gracefully shutdown all services
    * Uses Promise.allSettled to ensure all services attempt to close even if some fail
    */
   public async shutdown(): Promise<void> {
     if (!this._initialized) {
       return;
+    }
+
+    // Run user-defined shutdown hooks first
+    if (this._shutdownHooks.length > 0) {
+      this._logger?.info({ message: `Running ${this._shutdownHooks.length} shutdown hook(s)...` });
+      await Promise.allSettled(
+        this._shutdownHooks.map(async (hook) => {
+          try {
+            await hook();
+          } catch (error) {
+            this._logger?.error({ message: 'Shutdown hook failed', err: error });
+          }
+        })
+      );
     }
 
     const shutdownResult = await this._lifecycleService.shutdown({
@@ -833,6 +978,16 @@ export class Katax {
     }
     this._bridges.clear();
 
+    // Stop all heartbeats
+    for (const hb of this._heartbeats) {
+      try {
+        hb.stop();
+      } catch (error) {
+        this._logger?.warn({ message: 'Failed to stop heartbeat', error });
+      }
+    }
+    this._heartbeats = [];
+
     this._initialized = false;
   }
 
@@ -853,6 +1008,7 @@ export class Katax {
       Katax.instance._sockets.clear();
       Katax.instance._cacheInstances.clear();
       Katax.instance._bridges.clear();
+      Katax.instance._heartbeats = [];
     }
     Katax.instance = null;
   }

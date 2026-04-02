@@ -1,6 +1,6 @@
 {
   "name": "katax-service-manager",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Runtime service container for Node.js applications - manages config, logging, database pools, and WebSocket services",
   "type": "module",
   "main": "./dist/index.js",
@@ -53,31 +53,41 @@
   },
   "homepage": "https://github.com/LOPIN6FARRIER/katax-service-manager#readme",
   "dependencies": {
-    "node-cron": "^4.2.1",
-    "pino": "^9.5.0",
-    "socket.io": "^4.8.1"
+    "pino": "^9.5.0"
   },
   "peerDependencies": {
+    "dotenv": ">=16.0.0",
     "mongodb": ">=6.0.0",
     "mysql2": ">=3.0.0",
+    "node-cron": ">=3.0.0",
     "pg": ">=8.0.0",
+    "pino-pretty": ">=10.0.0",
     "redis": ">=4.0.0",
-    "pino-pretty": ">=10.0.0"
+    "socket.io": ">=4.0.0"
   },
   "peerDependenciesMeta": {
-    "pg": {
-      "optional": true
-    },
-    "mysql2": {
+    "dotenv": {
       "optional": true
     },
     "mongodb": {
       "optional": true
     },
-    "redis": {
+    "mysql2": {
+      "optional": true
+    },
+    "node-cron": {
+      "optional": true
+    },
+    "pg": {
       "optional": true
     },
     "pino-pretty": {
+      "optional": true
+    },
+    "redis": {
+      "optional": true
+    },
+    "socket.io": {
       "optional": true
     }
   },

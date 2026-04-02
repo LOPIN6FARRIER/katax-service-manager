@@ -30,7 +30,8 @@ export class HealthService {
           await (client as { db: () => { command: (cmd: object) => Promise<unknown> } })
             .db()
             .command({ ping: 1 });
-        } else {
+        } else if (db.query) {
+          // PostgreSQL/MySQL
           await db.query('SELECT 1');
         }
         result.services.databases[name] = true;

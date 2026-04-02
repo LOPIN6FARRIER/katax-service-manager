@@ -2,6 +2,122 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-04-01
+
+### ✨ Added
+
+#### Auto .env Loading
+- `loadEnv: true` option in `katax.init()` automatically loads environment variables using dotenv
+- Requires `dotenv` as optional peer dependency
+- No need to manually call `dotenv.config()`
+
+#### String Logger Syntax (Retrocompatible)
+- All logger methods now accept both `string` and `object` parameters
+- Cleaner API while maintaining backwards compatibility
+```typescript
+katax.logger.info('User created'); // New simple syntax
+katax.logger.info({ message: 'User created', userId: 123 }); // Still works
+```
+
+#### Automatic Shutdown Handling
+- `katax.onShutdown(fn)` - Register custom cleanup hooks
+- SIGTERM/SIGINT handlers registered automatically during `init()`
+- Heartbeats and resources cleaned up automatically on shutdown
+- User hooks execute before Katax teardown
+```typescript
+katax.onShutdown(async () => {
+  await closeCustomConnection();
+});
+// SIGTERM/SIGINT handlers are automatic!
+```
+
+#### Automatic Heartbeat Cleanup
+- `katax.heartbeat()` returns `{ stop: () => void }`
+- Heartbeats automatically stopped during `katax.shutdown()`
+- No manual tracking needed
+
+#### Type Improvements
+- `LogLevel` type exported from main package
+- `LogEntry` interface for transport type safety
+- `LogMessage` changed to `string | LogMessageObject` union type
+- `katax.env()` with proper type inference based on default value
+```typescript
+const port = katax.env('PORT', 3000);      // number
+const debug = katax.env('DEBUG', false);   // boolean
+const name = katax.env('NAME', 'api');     // string
+```
+
+#### RedisTransport Customization
+- `RedisTransportOptions` interface for advanced configuration
+- Dynamic stream keys with function support
+- Custom format function to control log structure
+- `maxLen` option for automatic stream trimming
+```typescript
+new RedisTransport(redis, {
+  streamKey: (log) => `logs:${log.appName}:${log.level}`,
+  format: (log) => ({ severity: log.level, msg: log.message }),
+  maxLen: 5000
+});
+```
+
+### 🔧 Changed
+
+#### Redis Auto-Reconnect
+- Redis connections now include default reconnect strategy
+- Automatic exponential backoff (max 3 seconds)
+- No configuration needed
+
+#### Optional Peer Dependencies
+- `socket.io` moved to optional peer dependencies
+- `node-cron` moved to optional peer dependencies
+- `dotenv` added as optional peer dependency
+- Smaller bundle size when features not used
+
+#### MongoDB Query Method
+- `query()` method is now optional in `IDatabaseService`
+- MongoDB and Redis adapters don't expose `query()`
+- Health checks updated to handle optional `query()`
+
+### 🐛 Fixed
+- Fixed health check calling non-existent `query()` on MongoDB/Redis
+- Fixed duplicate `peerDependenciesMeta` entry in package.json
+- Fixed type safety in log transports (removed `any` casts)
+- Fixed template literal escaping in telegram transport
+
+### 💥 Breaking Changes
+
+1. **LogMessage Type** - Changed from `interface` to `string | LogMessageObject` union
+   - Migration: No changes needed - fully backwards compatible
+
+2. **Optional Peer Dependencies** - `socket.io` and `node-cron` must be installed explicitly
+   - Migration: `npm install socket.io node-cron` if using these features
+
+3. **MongoDB/Redis query()** - These adapters no longer expose `query()` method
+   - Migration: Use native client methods instead
+
+### 📦 Migration Guide: 0.4.x → 0.5.0
+
+```bash
+# Install optional dependencies if needed
+npm install socket.io node-cron dotenv
+```
+
+```typescript
+// Simplify initialization
+await katax.init({ loadEnv: true }); // Replaces dotenv.config()
+
+// Simplify shutdown
+katax.onShutdown(async () => {
+  // Custom cleanup only
+});
+// No need for manual process.on() handlers
+
+// Use simpler logger syntax
+katax.logger.info('Message'); // Instead of { message: 'Message' }
+```
+
+---
+
 ## [0.4.1] - 2026-03-20
 ### Fixed
 - **RedisTransport**: Convert numeric values to strings for Redis v5+ compatibility

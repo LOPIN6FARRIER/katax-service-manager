@@ -133,7 +133,7 @@ export class RedisStreamBridgeService {
           'BLOCK',
           String(this.blockTimeout), // ← Convert to string for Redis
           'COUNT',
-          String(this.batchSize),    // ← Convert to string for Redis
+          String(this.batchSize), // ← Convert to string for Redis
           'STREAMS',
           this.streamKey,
           '>'

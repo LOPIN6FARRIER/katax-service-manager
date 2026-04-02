@@ -3,6 +3,7 @@ import type {
   ILoggerService,
   IWebSocketService,
   LoggerConfig,
+  LogLevel,
   LogMessage,
   LogTransport,
 } from '../types.js';
@@ -147,7 +148,8 @@ export class LoggerService implements ILoggerService {
   }
 
   public trace(log: LogMessage): void {
-    const { message, broadcast, room, ...metadata } = log;
+    const normalized = typeof log === 'string' ? { message: log } : log;
+    const { message, broadcast, room, ...metadata } = normalized;
 
     // Log locally with metadata
     this.logger.trace(metadata, message);
@@ -162,7 +164,8 @@ export class LoggerService implements ILoggerService {
   }
 
   public debug(log: LogMessage): void {
-    const { message, broadcast, room, ...metadata } = log;
+    const normalized = typeof log === 'string' ? { message: log } : log;
+    const { message, broadcast, room, ...metadata } = normalized;
 
     this.logger.debug(metadata, message);
 
@@ -174,7 +177,8 @@ export class LoggerService implements ILoggerService {
   }
 
   public info(log: LogMessage): void {
-    const { message, broadcast, room, ...metadata } = log;
+    const normalized = typeof log === 'string' ? { message: log } : log;
+    const { message, broadcast, room, ...metadata } = normalized;
 
     this.logger.info(metadata, message);
 
@@ -186,7 +190,8 @@ export class LoggerService implements ILoggerService {
   }
 
   public warn(log: LogMessage): void {
-    const { message, broadcast, room, ...metadata } = log;
+    const normalized = typeof log === 'string' ? { message: log } : log;
+    const { message, broadcast, room, ...metadata } = normalized;
 
     this.logger.warn(metadata, message);
 
@@ -198,7 +203,8 @@ export class LoggerService implements ILoggerService {
   }
 
   public error(log: LogMessage): void {
-    const { message, broadcast, room, ...metadata } = log;
+    const normalized = typeof log === 'string' ? { message: log } : log;
+    const { message, broadcast, room, ...metadata } = normalized;
 
     this.logger.error(metadata, message);
 
@@ -210,7 +216,8 @@ export class LoggerService implements ILoggerService {
   }
 
   public fatal(log: LogMessage): void {
-    const { message, broadcast, room, ...metadata } = log;
+    const normalized = typeof log === 'string' ? { message: log } : log;
+    const { message, broadcast, room, ...metadata } = normalized;
 
     this.logger.fatal(metadata, message);
 
@@ -225,14 +232,14 @@ export class LoggerService implements ILoggerService {
    * Deliver a log object to configured transports asynchronously.
    * Respects transport.filter and per-log override `persist` when present.
    */
-  private deliverToTransports(level: string, log: LogMessage): void {
+  private deliverToTransports(level: LogLevel, log: Record<string, unknown>): void {
     // Attach level, timestamp and appName
-    const enriched: LogMessage = {
+    const enriched = {
       ...log,
-      level: level as 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal',
+      level,
       timestamp: Date.now(),
       ...(this.appName && { appName: this.appName }),
-    };
+    } as any;
 
     const persistOverride = Object.prototype.hasOwnProperty.call(enriched, 'persist')
       ? (enriched as any).persist

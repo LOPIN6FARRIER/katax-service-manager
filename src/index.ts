@@ -16,7 +16,11 @@ export type {
   RegistryUnregisterPayload,
   ServiceInfo,
   LoggerConfig,
+  LogLevel,
   LogMessage,
+  LogMessageObject,
+  LogEntry,
+  LogTransport,
   DatabaseConfig,
   WebSocketConfig,
   CronConfig,
@@ -46,6 +50,7 @@ export {
   type RedisStreamBridgeConfig,
 } from './services/redis-stream-bridge.service.js';
 export { RedisTransport } from './services/transports/redis.transport.js';
+export type { RedisTransportOptions } from './services/transports/redis.transport.js';
 export { CallbackTransport } from './services/transports/callback.transport.js';
 export { TelegramTransport } from './services/transports/telegram.transport.js';
 export type { TelegramTransportOptions } from './services/transports/telegram.transport.js';

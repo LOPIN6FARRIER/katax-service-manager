@@ -163,8 +163,16 @@ class RedisAdapter implements DatabaseAdapter {
     // @ts-expect-error - redis is an optional peer dependency
     const { createClient } = await import('redis');
 
+    // Default reconnect strategy to handle idle connection drops
+    const defaultReconnectStrategy = (retries: number) => Math.min(retries * 100, 3000);
+
     if (typeof config.connection === 'string') {
-      const client = createClient({ url: config.connection });
+      const client = createClient({
+        url: config.connection,
+        socket: {
+          reconnectStrategy: defaultReconnectStrategy,
+        },
+      });
       await client.connect();
       await client.ping();
       return client;
@@ -182,7 +190,12 @@ class RedisAdapter implements DatabaseAdapter {
     const database = conn.db !== undefined ? `/${conn.db}` : '';
     const url = `${protocol}://${auth}${conn.host}:${conn.port ?? 6379}${database}`;
 
-    const client = createClient({ url });
+    const client = createClient({
+      url,
+      socket: {
+        reconnectStrategy: defaultReconnectStrategy,
+      },
+    });
     await client.connect();
     await client.ping();
     return client;

@@ -28,6 +28,13 @@ export interface KataxConfig {
  */
 export interface KataxInitConfig {
   /**
+   * Load environment variables from .env file before initialization
+   * Requires 'dotenv' to be installed as a peer dependency
+   * @default false
+   */
+  loadEnv?: boolean;
+
+  /**
    * Logger configuration
    */
   logger?: LoggerConfig;
@@ -179,12 +186,17 @@ export interface HealthCheckResult {
 /**
  * Logger service configuration
  */
+/**
+ * Log levels supported by the logger
+ */
+export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+
 export interface LoggerConfig {
   /**
    * Log level: trace, debug, info, warn, error, fatal
    * @default 'info'
    */
-  level?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+  level?: LogLevel;
 
   /**
    * Enable pretty printing in development
@@ -413,7 +425,7 @@ export interface IConfigService {
 /**
  * Extended log message with standard optional properties
  */
-export interface LogMessage {
+export interface LogMessageObject {
   /**
    * The log message (required)
    */
@@ -466,7 +478,7 @@ export interface LogMessage {
    * Log level (added automatically by logger)
    * @internal
    */
-  level?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+  level?: LogLevel;
 
   /**
    * Unix timestamp in milliseconds (added automatically by logger)
@@ -548,6 +560,35 @@ export interface LogMessage {
 }
 
 /**
+ * Log input - accepts plain string or full object
+ * @example
+ * logger.info('Server started')  // Simple string
+ * logger.info({ message: 'User created', userId: 123 })  // Full object
+ */
+export type LogMessage = string | LogMessageObject;
+
+/**
+ * Enriched log entry passed to transports
+ * Contains all LogMessageObject properties plus required metadata
+ */
+export interface LogEntry extends LogMessageObject {
+  /**
+   * Log level (always present in transport entries)
+   */
+  level: LogLevel;
+
+  /**
+   * Unix timestamp in milliseconds (always present in transport entries)
+   */
+  timestamp: number;
+
+  /**
+   * Application name (present if set)
+   */
+  appName?: string;
+}
+
+/**
  * Transport interface for pluggable log destinations
  */
 export interface LogTransport {
@@ -558,12 +599,12 @@ export interface LogTransport {
    * Optional filter predicate. If provided, transport will only receive logs
    * when filter(log) returns true.
    */
-  filter?(log: LogMessage): boolean;
+  filter?(log: LogEntry): boolean;
 
   /**
    * Send a log message to the transport destination.
    */
-  send(log: LogMessage): Promise<void>;
+  send(log: LogEntry): Promise<void>;
 
   /** Optional close method for graceful shutdown */
   close?(): Promise<void>;
@@ -641,14 +682,20 @@ export interface IDatabaseService {
   init(): Promise<void>;
 
   /**
-   * Execute a query
+   * Execute a SQL query (PostgreSQL, MySQL only)
+   * Not available for MongoDB or Redis - use getClient() instead
    * @param sql - SQL query or operation
    * @param params - Query parameters
+   * @throws Error for MongoDB/Redis connections
    */
-  query<T = unknown>(sql: string, params?: unknown[]): Promise<T>;
+  query?<T = unknown>(sql: string, params?: unknown[]): Promise<T>;
 
   /**
    * Get a database client/connection from the pool
+   * - PostgreSQL: pg.PoolClient
+   * - MySQL: mysql2.PoolConnection
+   * - MongoDB: MongoClient
+   * - Redis: RedisClient
    */
   getClient(): Promise<unknown>;
 

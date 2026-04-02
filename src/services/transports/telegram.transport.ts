@@ -1,4 +1,4 @@
-import type { LogTransport, LogMessage } from '../../types.js';
+import type { LogTransport, LogEntry } from '../../types.js';
 
 export interface TelegramTransportOptions {
   /**
@@ -77,17 +77,16 @@ export class TelegramTransport implements LogTransport {
    * ```typescript
    * telegramTransport.filter = (log) => {
    *   // Don't send if marked with skipTelegram
-   *   if ((log as any).skipTelegram) return false;
+   *   if (log.skipTelegram) return false;
    *
    *   // Don't send specific error types
-   *   const message = String((log as any).message ?? '');
-   *   if (message.includes('not found')) return false;
+   *   if (log.message.includes('not found')) return false;
    *
    *   return true; // Send everything else
    * };
    * ```
    */
-  public filter?(log: LogMessage): boolean;
+  public filter?(log: LogEntry): boolean;
 
   constructor(options: TelegramTransportOptions) {
     this.botToken = options.botToken;
@@ -109,9 +108,9 @@ export class TelegramTransport implements LogTransport {
   /**
    * Filtra logs según nivel y flag persist (default behavior)
    */
-  private shouldSend(log: LogMessage): boolean {
-    const level = String((log as any).level ?? 'info');
-    const persist = (log as any).persist === true;
+  private shouldSend(log: LogEntry): boolean {
+    const level = log.level ?? 'info';
+    const persist = log.persist === true;
 
     // Enviar si el nivel está en la lista O si tiene persist=true
     return this.levels.has(level) || (this.includePersist && persist);
@@ -120,9 +119,9 @@ export class TelegramTransport implements LogTransport {
   /**
    * Formatea el log para Telegram
    */
-  private formatMessage(log: LogMessage): string {
-    const level = String((log as any).level ?? 'info').toUpperCase();
-    const appName = (log as any).appName ?? 'app';
+  private formatMessage(log: LogEntry): string {
+    const level = (log.level ?? 'info').toUpperCase();
+    const appName = log.appName ?? 'app';
     const message =
       typeof log.message === 'string' ? log.message : JSON.stringify(log.message, null, 2);
 
@@ -148,12 +147,12 @@ export class TelegramTransport implements LogTransport {
       level: __,
       persist,
       appName: ___,
-      timestamp: ____, // ← Filtrar timestamp
-      skipTransport, // ← Filtrar flags internos
+      timestamp,
+      skipTransport,
       skipTelegram,
       skipRedis,
       ...metadata
-    } = log as any;
+    } = log;
 
     // Solo mostrar metadata si hay propiedades útiles
     if (Object.keys(metadata).length > 0) {
@@ -161,12 +160,11 @@ export class TelegramTransport implements LogTransport {
       formatted += `\n\n\`\`\`json\n${metaStr}\n\`\`\``;
     }
 
-    // Timestamp (mostrar fecha/hora legible, no el número)
-    const logTimestamp = (log as any).timestamp;
-    const timestamp = logTimestamp
-      ? new Date(logTimestamp).toLocaleString('es-ES', { timeZone: 'America/Mexico_City' })
+    // Timestamp (mostrar fecha/hora legible)
+    const timestampStr = timestamp
+      ? new Date(timestamp).toLocaleString('es-ES', { timeZone: 'America/Mexico_City' })
       : new Date().toLocaleString('es-ES', { timeZone: 'America/Mexico_City' });
-    formatted += `\n\n🕐 ${timestamp}`;
+    formatted += `\n\n🕐 ${timestampStr}`;
 
     // Truncar si es muy largo
     if (formatted.length > this.maxLength) {
@@ -179,7 +177,7 @@ export class TelegramTransport implements LogTransport {
   /**
    * Envía el log a Telegram
    */
-  public async send(log: LogMessage): Promise<void> {
+  public async send(log: LogEntry): Promise<void> {
     // First check default filter (levels & persist)
     if (!this.shouldSend(log)) {
       return;
