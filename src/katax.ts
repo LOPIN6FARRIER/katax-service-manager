@@ -27,6 +27,13 @@ import type {
   HealthCheckResult,
   ServiceInfo,
 } from './types.js';
+import {
+  KataxConfigError,
+  KataxDatabaseError,
+  KataxNotInitializedError,
+  KataxRedisError,
+  KataxWebSocketError,
+} from './errors.js';
 
 /**
  * Katax Service Manager
@@ -161,7 +168,7 @@ export class Katax {
         const dotenv = await import('dotenv');
         dotenv.config();
       } catch (error) {
-        throw new Error(
+        throw new KataxConfigError(
           'loadEnv: true requires "dotenv" to be installed.\n' + 'Run: npm install dotenv'
         );
       }
@@ -214,10 +221,7 @@ export class Katax {
    */
   private ensureInitialized(): void {
     if (!this._initialized) {
-      throw new Error(
-        'Katax not initialized. Call katax.init() before using any services.\n' +
-          'Example: await katax.init(); // or katax.init().then(() => {...})'
-      );
+      throw new KataxNotInitializedError();
     }
   }
 
@@ -291,7 +295,7 @@ export class Katax {
 
     // Validate name is provided
     if (!config.name) {
-      throw new Error('Database name is required');
+      throw new KataxDatabaseError('Database name is required');
     }
 
     const dbOverride = this.getOverride<IDatabaseService>(`db:${config.name}`);
@@ -341,7 +345,10 @@ export class Katax {
 
       // Default behavior: throw error (fail-fast)
       this._logger!.error({ message: `Failed to create database '${config.name}'`, err: error });
-      throw new Error(`Database '${config.name}' initialization failed: ${errorMessage}`);
+      throw new KataxDatabaseError(
+        `Database '${config.name}' initialization failed: ${errorMessage}`,
+        { name: config.name, type: config.type }
+      );
     } finally {
       this._pendingDatabases.delete(config.name);
     }
@@ -381,7 +388,7 @@ export class Katax {
 
     // Validate name is provided
     if (!config.name) {
-      throw new Error('WebSocket name is required');
+      throw new KataxWebSocketError('WebSocket name is required');
     }
 
     const socketOverride = this.getOverride<IWebSocketService>(`ws:${config.name}`);
@@ -430,7 +437,10 @@ export class Katax {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this._logger!.error({ message: `Failed to create WebSocket '${config.name}'`, err: error });
-      throw new Error(`WebSocket '${config.name}' initialization failed: ${errorMessage}`);
+      throw new KataxWebSocketError(
+        `WebSocket '${config.name}' initialization failed: ${errorMessage}`,
+        { name: config.name }
+      );
     } finally {
       this._pendingSockets.delete(config.name);
     }
@@ -535,7 +545,7 @@ export class Katax {
     }
     const db = this._databases.get(name);
     if (!db) {
-      throw new Error(
+      throw new KataxDatabaseError(
         `Database '${name}' not found. Available: [${Array.from(this._databases.keys()).join(', ')}]`
       );
     }
@@ -557,7 +567,7 @@ export class Katax {
     }
     const socket = this._sockets.get(name);
     if (!socket) {
-      throw new Error(
+      throw new KataxWebSocketError(
         `WebSocket '${name}' not found. Available: [${Array.from(this._sockets.keys()).join(', ')}]`
       );
     }
@@ -614,13 +624,13 @@ export class Katax {
     const redis = this._databases.get(redisName);
 
     if (!redis) {
-      throw new Error(
+      throw new KataxRedisError(
         `Redis connection '${redisName}' not found. Create it first using katax.database()`
       );
     }
 
     if (redis.config?.type !== 'redis') {
-      throw new Error(
+      throw new KataxRedisError(
         `Database '${redisName}' is not a Redis connection (type: ${redis.config?.type})`
       );
     }
@@ -675,20 +685,22 @@ export class Katax {
 
     const redis = this._databases.get(redisName);
     if (!redis) {
-      throw new Error(
+      throw new KataxRedisError(
         `Redis connection '${redisName}' not found. Create it first using katax.database()`
       );
     }
 
     if (redis.config?.type !== 'redis') {
-      throw new Error(
+      throw new KataxRedisError(
         `Database '${redisName}' is not a Redis connection (type: ${redis.config?.type})`
       );
     }
 
     const socket = this._sockets.get(socketName);
     if (!socket) {
-      throw new Error(`WebSocket '${socketName}' not found. Create it first using katax.socket()`);
+      throw new KataxWebSocketError(
+        `WebSocket '${socketName}' not found. Create it first using katax.socket()`
+      );
     }
 
     const bridge = new RedisStreamBridgeService(redis, socket, config);
@@ -740,13 +752,13 @@ export class Katax {
 
     const redis = this._databases.get(redisName);
     if (!redis) {
-      throw new Error(
+      throw new KataxRedisError(
         `Redis connection '${redisName}' not found. Create it first using katax.database()`
       );
     }
 
     if (redis.config?.type !== 'redis') {
-      throw new Error(
+      throw new KataxRedisError(
         `Database '${redisName}' is not a Redis connection (type: ${redis.config?.type})`
       );
     }
@@ -854,7 +866,9 @@ export class Katax {
   public envRequired(key: string): string {
     const value = process.env[key];
     if (value === undefined || value === '') {
-      throw new Error(`Required environment variable '${key}' is not set`);
+      throw new KataxConfigError(`Required environment variable '${key}' is not set`, {
+        key,
+      });
     }
     return value;
   }
