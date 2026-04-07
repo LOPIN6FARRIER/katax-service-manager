@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Katax } from './katax.js';
 import type { IDatabaseService, ILoggerService } from './types.js';
+import { KataxConfigError, KataxDatabaseError } from './errors.js';
 
 describe('Katax lifecycle hooks', () => {
   const originalNodeEnv = process.env['NODE_ENV'];
@@ -151,5 +152,28 @@ describe('Katax lifecycle hooks', () => {
     katax.logger.info({ message: 'from override' });
 
     expect(loggerMock.info).toHaveBeenCalledWith({ message: 'from override' });
+  });
+
+  it('throws KataxConfigError when envRequired key is missing', async () => {
+    const katax = new Katax();
+    await katax.init();
+
+    const previous = process.env['MISSING_ENV_TEST'];
+    delete process.env['MISSING_ENV_TEST'];
+
+    try {
+      expect(() => katax.envRequired('MISSING_ENV_TEST')).toThrow(KataxConfigError);
+    } finally {
+      if (previous !== undefined) {
+        process.env['MISSING_ENV_TEST'] = previous;
+      }
+    }
+  });
+
+  it('throws KataxDatabaseError when db is not found', async () => {
+    const katax = new Katax();
+    await katax.init();
+
+    expect(() => katax.db('not-found-db')).toThrow(KataxDatabaseError);
   });
 });

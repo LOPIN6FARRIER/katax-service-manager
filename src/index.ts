@@ -4,6 +4,15 @@
  */
 
 export { Katax, katax } from './katax.js';
+export {
+  KataxServiceError,
+  KataxConfigError,
+  KataxNotInitializedError,
+  KataxDatabaseError,
+  KataxRedisError,
+  KataxWebSocketError,
+  KataxRegistryError,
+} from './errors.js';
 
 // Export types
 export type {
