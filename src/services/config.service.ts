@@ -19,7 +19,6 @@ export class ConfigService implements IConfigService {
    * Load configuration from environment variables
    */
   private loadFromEnv(): void {
-    // Load all environment variables
     for (const [key, value] of Object.entries(process.env)) {
       if (this.envPrefix && key.startsWith(this.envPrefix)) {
         const configKey = key.slice(this.envPrefix.length);
@@ -34,20 +33,17 @@ export class ConfigService implements IConfigService {
    * Get a configuration value
    */
   public get<T = string>(key: string, defaultValue?: T): T {
-    // Check in-memory config first
     if (this.config.has(key)) {
       return this.config.get(key) as T;
     }
 
-    // Check environment variables with prefix
     const envKey = this.envPrefix ? `${this.envPrefix}${key}` : key;
     const envValue = process.env[envKey];
-    
+
     if (envValue !== undefined) {
       return this.parseValue(envValue) as T;
     }
 
-    // Return default value
     if (defaultValue !== undefined) {
       return defaultValue;
     }
@@ -78,16 +74,13 @@ export class ConfigService implements IConfigService {
    * Parse string value to appropriate type
    */
   private parseValue(value: string): string | number | boolean {
-    // Boolean
     if (value === 'true') return true;
     if (value === 'false') return false;
 
-    // Number
     if (!isNaN(Number(value)) && value.trim() !== '') {
       return Number(value);
     }
 
-    // String
     return value;
   }
 

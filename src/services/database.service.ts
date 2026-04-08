@@ -1,10 +1,73 @@
-import type { IDatabaseService, DatabaseConfig } from '../types.js';
+import type {
+  IDatabaseService,
+  DatabaseConfig,
+  ISqlDatabase,
+  IMongoDatabase,
+  IRedisDatabase,
+} from '../types.js';
 
 /**
  * Database service implementation
  * Singleton wrapper for database connection pools
  */
 type RedisArg = string | number | Buffer;
+
+interface PostgresPoolLike {
+  query: (text: string, values?: unknown[]) => Promise<{ rows: unknown }>;
+  connect: () => Promise<unknown>;
+  end: () => Promise<void>;
+}
+
+interface MySQLPoolLike {
+  query: (text: string, values?: unknown[]) => Promise<unknown>;
+  execute: (queryText: string, values?: unknown[]) => Promise<[unknown, unknown]>;
+  getConnection: () => Promise<unknown>;
+  end: () => Promise<void>;
+}
+
+interface MongoClientLike {
+  close: () => Promise<void>;
+}
+
+interface RedisClientLike {
+  quit: () => Promise<void>;
+  sendCommand: (commandArgs: RedisArg[]) => Promise<unknown>;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isPostgresPoolLike(pool: unknown): pool is PostgresPoolLike {
+  return (
+    isObject(pool) &&
+    typeof pool['query'] === 'function' &&
+    typeof pool['connect'] === 'function' &&
+    typeof pool['end'] === 'function'
+  );
+}
+
+function isMySQLPoolLike(pool: unknown): pool is MySQLPoolLike {
+  return (
+    isObject(pool) &&
+    typeof pool['query'] === 'function' &&
+    typeof pool['execute'] === 'function' &&
+    typeof pool['getConnection'] === 'function' &&
+    typeof pool['end'] === 'function'
+  );
+}
+
+function isMongoClientLike(pool: unknown): pool is MongoClientLike {
+  return isObject(pool) && typeof pool['close'] === 'function';
+}
+
+function isRedisClientLike(pool: unknown): pool is RedisClientLike {
+  return (
+    isObject(pool) &&
+    typeof pool['quit'] === 'function' &&
+    typeof pool['sendCommand'] === 'function'
+  );
+}
 
 interface DatabaseAdapter {
   init(config: DatabaseConfig): Promise<unknown>;
@@ -48,21 +111,25 @@ class PostgresAdapter implements DatabaseAdapter {
   }
 
   public async query<T = unknown>(pool: unknown, sql: string, params?: unknown[]): Promise<T> {
-    const pgPool = pool as {
-      query: (text: string, values?: unknown[]) => Promise<{ rows: T }>;
-    };
-    const result = await pgPool.query(sql, params);
+    if (!isPostgresPoolLike(pool)) {
+      throw new Error('Invalid PostgreSQL pool instance');
+    }
+    const result = await pool.query(sql, params);
     return result.rows as T;
   }
 
   public async getClient(pool: unknown): Promise<unknown> {
-    const pgPool = pool as { connect: () => Promise<unknown> };
-    return await pgPool.connect();
+    if (!isPostgresPoolLike(pool)) {
+      throw new Error('Invalid PostgreSQL pool instance');
+    }
+    return await pool.connect();
   }
 
   public async close(pool: unknown): Promise<void> {
-    const pgPool = pool as { end: () => Promise<void> };
-    await pgPool.end();
+    if (!isPostgresPoolLike(pool)) {
+      throw new Error('Invalid PostgreSQL pool instance');
+    }
+    await pool.end();
   }
 }
 
@@ -104,21 +171,25 @@ class MySQLAdapter implements DatabaseAdapter {
   }
 
   public async query<T = unknown>(pool: unknown, sql: string, params?: unknown[]): Promise<T> {
-    const mySqlPool = pool as {
-      execute: (queryText: string, values?: unknown[]) => Promise<[T, unknown]>;
-    };
-    const [rows] = await mySqlPool.execute(sql, params);
-    return rows;
+    if (!isMySQLPoolLike(pool)) {
+      throw new Error('Invalid MySQL pool instance');
+    }
+    const [rows] = await pool.execute(sql, params);
+    return rows as T;
   }
 
   public async getClient(pool: unknown): Promise<unknown> {
-    const mySqlPool = pool as { getConnection: () => Promise<unknown> };
-    return await mySqlPool.getConnection();
+    if (!isMySQLPoolLike(pool)) {
+      throw new Error('Invalid MySQL pool instance');
+    }
+    return await pool.getConnection();
   }
 
   public async close(pool: unknown): Promise<void> {
-    const mySqlPool = pool as { end: () => Promise<void> };
-    await mySqlPool.end();
+    if (!isMySQLPoolLike(pool)) {
+      throw new Error('Invalid MySQL pool instance');
+    }
+    await pool.end();
   }
 }
 
@@ -153,8 +224,10 @@ class MongoAdapter implements DatabaseAdapter {
   }
 
   public async close(pool: unknown): Promise<void> {
-    const client = pool as { close: () => Promise<void> };
-    await client.close();
+    if (!isMongoClientLike(pool)) {
+      throw new Error('Invalid MongoDB client instance');
+    }
+    await pool.close();
   }
 }
 
@@ -162,8 +235,6 @@ class RedisAdapter implements DatabaseAdapter {
   public async init(config: DatabaseConfig): Promise<unknown> {
     // @ts-expect-error - redis is an optional peer dependency
     const { createClient } = await import('redis');
-
-    // Default reconnect strategy to handle idle connection drops
     const defaultReconnectStrategy = (retries: number) => Math.min(retries * 100, 3000);
 
     if (typeof config.connection === 'string') {
@@ -210,13 +281,17 @@ class RedisAdapter implements DatabaseAdapter {
   }
 
   public async close(pool: unknown): Promise<void> {
-    const client = pool as { quit: () => Promise<void> };
-    await client.quit();
+    if (!isRedisClientLike(pool)) {
+      throw new Error('Invalid Redis client instance');
+    }
+    await pool.quit();
   }
 
   public async redis(pool: unknown, args: RedisArg[]): Promise<unknown> {
-    const client = pool as { sendCommand: (commandArgs: RedisArg[]) => Promise<unknown> };
-    return await client.sendCommand(args);
+    if (!isRedisClientLike(pool)) {
+      throw new Error('Invalid Redis client instance');
+    }
+    return await pool.sendCommand(args);
   }
 }
 
@@ -319,6 +394,41 @@ export class DatabaseService implements IDatabaseService {
         `Redis command failed: ${error instanceof Error ? error.message : String(error)}`
       );
     }
+  }
+
+  /**
+   * Returns this service typed as a SQL database (PostgreSQL or MySQL).
+   * Throws at runtime if the configured type is not 'postgresql' or 'mysql'.
+   */
+  public asSql(): ISqlDatabase {
+    if (this.config.type !== 'postgresql' && this.config.type !== 'mysql') {
+      throw new Error(
+        `asSql() requires a postgresql or mysql connection, got '${this.config.type}'`
+      );
+    }
+    return this as unknown as ISqlDatabase;
+  }
+
+  /**
+   * Returns this service typed as a MongoDB database.
+   * Throws at runtime if the configured type is not 'mongodb'.
+   */
+  public asMongo(): IMongoDatabase {
+    if (this.config.type !== 'mongodb') {
+      throw new Error(`asMongo() requires a mongodb connection, got '${this.config.type}'`);
+    }
+    return this as unknown as IMongoDatabase;
+  }
+
+  /**
+   * Returns this service typed as a Redis database.
+   * Throws at runtime if the configured type is not 'redis'.
+   */
+  public asRedis(): IRedisDatabase {
+    if (this.config.type !== 'redis') {
+      throw new Error(`asRedis() requires a redis connection, got '${this.config.type}'`);
+    }
+    return this as unknown as IRedisDatabase;
   }
 
   /**

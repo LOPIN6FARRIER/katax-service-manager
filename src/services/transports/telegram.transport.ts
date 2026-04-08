@@ -112,7 +112,6 @@ export class TelegramTransport implements LogTransport {
     const level = log.level ?? 'info';
     const persist = log.persist === true;
 
-    // Enviar si el nivel está en la lista O si tiene persist=true
     return this.levels.has(level) || (this.includePersist && persist);
   }
 
@@ -125,7 +124,6 @@ export class TelegramTransport implements LogTransport {
     const message =
       typeof log.message === 'string' ? log.message : JSON.stringify(log.message, null, 2);
 
-    // Emojis según nivel
     const emoji =
       {
         TRACE: '🔍',
@@ -136,10 +134,8 @@ export class TelegramTransport implements LogTransport {
         FATAL: '💀',
       }[level] ?? '📝';
 
-    // Formato básico
     let formatted = `${emoji} *${level}* - \`${appName}\`\n\n${message}`;
 
-    // Agregar metadata si existe (filtrar propiedades internas)
     const {
       message: _,
       broadcast,
@@ -154,19 +150,16 @@ export class TelegramTransport implements LogTransport {
       ...metadata
     } = log;
 
-    // Solo mostrar metadata si hay propiedades útiles
     if (Object.keys(metadata).length > 0) {
       const metaStr = JSON.stringify(metadata, null, 2);
       formatted += `\n\n\`\`\`json\n${metaStr}\n\`\`\``;
     }
 
-    // Timestamp (mostrar fecha/hora legible)
     const timestampStr = timestamp
       ? new Date(timestamp).toLocaleString('es-ES', { timeZone: 'America/Mexico_City' })
       : new Date().toLocaleString('es-ES', { timeZone: 'America/Mexico_City' });
     formatted += `\n\n🕐 ${timestampStr}`;
 
-    // Truncar si es muy largo
     if (formatted.length > this.maxLength) {
       formatted = formatted.substring(0, this.maxLength - 20) + '\n\n...(truncado)';
     }
@@ -178,12 +171,10 @@ export class TelegramTransport implements LogTransport {
    * Envía el log a Telegram
    */
   public async send(log: LogEntry): Promise<void> {
-    // First check default filter (levels & persist)
     if (!this.shouldSend(log)) {
       return;
     }
 
-    // Then check custom filter if defined
     if (this.filter && !this.filter(log)) {
       return;
     }
@@ -215,7 +206,5 @@ export class TelegramTransport implements LogTransport {
   /**
    * Cierra el transport (nada que cerrar en este caso)
    */
-  public async close(): Promise<void> {
-    // Nothing to close
-  }
+  public async close(): Promise<void> {}
 }

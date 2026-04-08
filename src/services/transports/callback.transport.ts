@@ -17,7 +17,5 @@ export class CallbackTransport implements LogTransport {
     await this.fn(log);
   }
 
-  public async close(): Promise<void> {
-    // nothing to do for callback
-  }
+  public async close(): Promise<void> {}
 }

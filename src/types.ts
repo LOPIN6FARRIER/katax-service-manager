@@ -431,7 +431,6 @@ export interface LogMessageObject {
    */
   message: string;
 
-  // ========== WebSocket Broadcasting ==========
   /**
    * Whether to broadcast this log to WebSocket clients
    * @default false
@@ -444,7 +443,6 @@ export interface LogMessageObject {
    */
   room?: string;
 
-  // ========== Transport Filtering ==========
   /**
    * Persist this log (save to Redis/Database even if not an error)
    * Useful for important info logs that should be stored
@@ -473,7 +471,6 @@ export interface LogMessageObject {
    */
   skipRedis?: boolean;
 
-  // ========== Metadata (added automatically by logger) ==========
   /**
    * Log level (added automatically by logger)
    * @internal
@@ -493,7 +490,6 @@ export interface LogMessageObject {
    */
   appName?: string;
 
-  // ========== Common Error Properties ==========
   /**
    * Error message, Error object, or any error-related data
    * @example 'Connection timeout', new Error('Failed'), { code: 'ECONNREFUSED' }
@@ -512,7 +508,6 @@ export interface LogMessageObject {
    */
   code?: string | number;
 
-  // ========== Common Context Properties ==========
   /**
    * User ID associated with this log
    * Useful for tracking user-specific actions or errors
@@ -551,7 +546,6 @@ export interface LogMessageObject {
    */
   ip?: string;
 
-  // ========== Additional metadata ==========
   /**
    * Any additional custom properties
    * The logger is flexible and accepts any key-value pairs
@@ -712,6 +706,49 @@ export interface IDatabaseService {
 }
 
 /**
+ * Typed view for SQL databases (PostgreSQL / MySQL).
+ * Obtain via `db.asSql()` or directly from `katax.database({ type: 'postgresql', ... })`.
+ */
+export interface ISqlDatabase extends Omit<IDatabaseService, 'query' | 'redis'> {
+  readonly config: DatabaseConfig;
+  /** Execute a parameterized SQL query and return typed rows (required for SQL) */
+  query<T = unknown>(sql: string, params?: unknown[]): Promise<T>;
+  getClient(): Promise<unknown>;
+  close(): Promise<void>;
+}
+
+/**
+ * Typed view for MongoDB databases.
+ * Obtain via `db.asMongo()` or directly from `katax.database({ type: 'mongodb', ... })`.
+ */
+export interface IMongoDatabase extends Omit<IDatabaseService, 'query' | 'redis'> {
+  readonly config: DatabaseConfig;
+  getClient(): Promise<unknown>;
+  close(): Promise<void>;
+}
+
+/**
+ * Typed view for Redis databases.
+ * Obtain via `db.asRedis()` or directly from `katax.database({ type: 'redis', ... })`.
+ */
+export interface IRedisDatabase extends Omit<IDatabaseService, 'query' | 'redis'> {
+  readonly config: DatabaseConfig;
+  /** Send a Redis command (e.g. 'SET', 'key', 'value') */
+  redis(...args: (string | number | Buffer)[]): Promise<unknown>;
+  close(): Promise<void>;
+}
+
+/**
+ * Connected WebSocket client exposed to custom connection handlers.
+ */
+export interface IWebSocketConnection {
+  emit(event: string, data: unknown): void;
+  on(event: string, handler: (data: unknown) => void): void;
+  join(room: string): void;
+  leave(room: string): void;
+}
+
+/**
  * WebSocket service interface
  * Primary use case: Broadcasting logs/events to connected dashboards (unidirectional)
  * Supports rooms for targeted broadcasting (e.g., by project, environment, service)
@@ -752,7 +789,7 @@ export interface IWebSocketService {
    * Use this to add custom logic when clients connect
    * @param handler - Connection handler function receiving the socket
    */
-  onConnection(handler: (socket: unknown) => void): void;
+  onConnection(handler: (socket: IWebSocketConnection) => void): void;
 
   /**
    * Check if there are clients connected in a specific room

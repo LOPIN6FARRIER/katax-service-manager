@@ -1,18 +1,11 @@
-import type { IDatabaseService } from '../types.js';
+import type { IRedisDatabase } from '../types.js';
 
 /**
  * Cache service implementation using Redis
  * Provides high-level cache operations with automatic JSON serialization
  */
 export class CacheService {
-  constructor(private readonly redis: IDatabaseService) {
-    if (redis.config?.type !== 'redis') {
-      throw new Error('CacheService requires a Redis database connection');
-    }
-    if (!redis.redis) {
-      throw new Error('Redis connection does not support redis() method');
-    }
-  }
+  constructor(private readonly redis: IRedisDatabase) {}
 
   /**
    * Get a value from cache
@@ -23,7 +16,7 @@ export class CacheService {
    */
   public async get<T = unknown>(key: string): Promise<T | null> {
     try {
-      const value = await this.redis.redis!('GET', key);
+      const value = await this.redis.redis('GET', key);
       if (!value) {
         return null;
       }
@@ -47,9 +40,9 @@ export class CacheService {
     try {
       const serialized = JSON.stringify(value);
       if (ttl) {
-        await this.redis.redis!('SET', key, serialized, 'EX', ttl);
+        await this.redis.redis('SET', key, serialized, 'EX', ttl);
       } else {
-        await this.redis.redis!('SET', key, serialized);
+        await this.redis.redis('SET', key, serialized);
       }
     } catch (error) {
       throw new Error(
@@ -66,7 +59,7 @@ export class CacheService {
    */
   public async del(key: string): Promise<void> {
     try {
-      await this.redis.redis!('DEL', key);
+      await this.redis.redis('DEL', key);
     } catch (error) {
       throw new Error(
         `Cache del failed: ${error instanceof Error ? error.message : String(error)}`
@@ -84,7 +77,7 @@ export class CacheService {
     if (keys.length === 0) return;
 
     try {
-      await this.redis.redis!('DEL', ...keys);
+      await this.redis.redis('DEL', ...keys);
     } catch (error) {
       throw new Error(
         `Cache delMany failed: ${error instanceof Error ? error.message : String(error)}`
@@ -100,7 +93,7 @@ export class CacheService {
    */
   public async exists(key: string): Promise<boolean> {
     try {
-      const result = await this.redis.redis!('EXISTS', key);
+      const result = await this.redis.redis('EXISTS', key);
       return result === 1;
     } catch (error) {
       throw new Error(
@@ -120,7 +113,7 @@ export class CacheService {
    */
   public async ttl(key: string): Promise<number> {
     try {
-      const result = await this.redis.redis!('TTL', key);
+      const result = await this.redis.redis('TTL', key);
       return result as number;
     } catch (error) {
       throw new Error(
@@ -137,7 +130,7 @@ export class CacheService {
    */
   public async expire(key: string, seconds: number): Promise<boolean> {
     try {
-      const result = await this.redis.redis!('EXPIRE', key, seconds);
+      const result = await this.redis.redis('EXPIRE', key, seconds);
       return result === 1;
     } catch (error) {
       throw new Error(
@@ -155,7 +148,7 @@ export class CacheService {
    */
   public async incr(key: string): Promise<number> {
     try {
-      const result = await this.redis.redis!('INCR', key);
+      const result = await this.redis.redis('INCR', key);
       return result as number;
     } catch (error) {
       throw new Error(
@@ -172,7 +165,7 @@ export class CacheService {
    */
   public async incrBy(key: string, increment: number): Promise<number> {
     try {
-      const result = await this.redis.redis!('INCRBY', key, increment);
+      const result = await this.redis.redis('INCRBY', key, increment);
       return result as number;
     } catch (error) {
       throw new Error(
@@ -189,7 +182,7 @@ export class CacheService {
    */
   public async decr(key: string): Promise<number> {
     try {
-      const result = await this.redis.redis!('DECR', key);
+      const result = await this.redis.redis('DECR', key);
       return result as number;
     } catch (error) {
       throw new Error(
@@ -209,7 +202,7 @@ export class CacheService {
     if (keys.length === 0) return [];
 
     try {
-      const values = (await this.redis.redis!('MGET', ...keys)) as (string | null)[];
+      const values = (await this.redis.redis('MGET', ...keys)) as (string | null)[];
       return values.map((v) => (v ? (JSON.parse(v) as T) : null));
     } catch (error) {
       throw new Error(
@@ -236,7 +229,7 @@ export class CacheService {
       for (const [key, value] of entries) {
         args.push(key, JSON.stringify(value));
       }
-      await this.redis.redis!('MSET', ...args);
+      await this.redis.redis('MSET', ...args);
     } catch (error) {
       throw new Error(
         `Cache mset failed: ${error instanceof Error ? error.message : String(error)}`
@@ -263,7 +256,7 @@ export class CacheService {
       let cursor = '0';
 
       do {
-        const result = (await this.redis.redis!(
+        const result = (await this.redis.redis(
           'SCAN',
           cursor,
           'MATCH',
@@ -276,7 +269,7 @@ export class CacheService {
         const keys = result[1] ?? [];
 
         if (keys.length > 0) {
-          await this.redis.redis!('DEL', ...keys);
+          await this.redis.redis('DEL', ...keys);
           deleted += keys.length;
         }
       } while (cursor !== '0');
@@ -298,7 +291,7 @@ export class CacheService {
    */
   public async stats(): Promise<Record<string, string>> {
     try {
-      const info = (await this.redis.redis!('INFO', 'stats')) as string;
+      const info = (await this.redis.redis('INFO', 'stats')) as string;
       const stats: Record<string, string> = {};
 
       for (const line of info.split('\n')) {

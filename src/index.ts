@@ -13,8 +13,6 @@ export {
   KataxWebSocketError,
   KataxRegistryError,
 } from './errors.js';
-
-// Export types
 export type {
   KataxConfig,
   KataxInitConfig,
@@ -42,11 +40,12 @@ export type {
   IConfigService,
   ILoggerService,
   IDatabaseService,
+  ISqlDatabase,
+  IMongoDatabase,
+  IRedisDatabase,
   IWebSocketService,
   ICronService,
 } from './types.js';
-
-// Export service classes (for advanced usage)
 export { ConfigService } from './services/config.service.js';
 export { LoggerService } from './services/logger.service.js';
 export { DatabaseService } from './services/database.service.js';

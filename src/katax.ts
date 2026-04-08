@@ -17,6 +17,9 @@ import type {
   IConfigService,
   ILoggerService,
   IDatabaseService,
+  ISqlDatabase,
+  IMongoDatabase,
+  IRedisDatabase,
   IWebSocketService,
   ICronService,
   CronJobConfig,
@@ -57,24 +60,16 @@ import {
 export class Katax {
   private static instance: Katax | null = null;
   private _initialized = false;
-
-  // App info from package.json (loaded once)
   private _appName: string = 'unknown';
   private _appVersion: string = '0.0.0';
-
-  // Services (initialized lazily via init())
   private _config: IConfigService | null = null;
   private _logger: ILoggerService | null = null;
   private _cronService: ICronService | null = null;
   private _registry: RegistryService | null = null;
   private _databases: Map<string, IDatabaseService> = new Map();
   private _sockets: Map<string, IWebSocketService> = new Map();
-
-  // Pending initialization promises (prevents race conditions)
   private _pendingDatabases: Map<string, Promise<IDatabaseService>> = new Map();
   private _pendingSockets: Map<string, Promise<IWebSocketService>> = new Map();
-
-  // Cache instances (reused)
   private _cacheInstances: Map<string, CacheService> = new Map();
   private _bridges: Map<string, RedisStreamBridgeService> = new Map();
   private _heartbeats: Array<{ stop: () => void }> = [];
@@ -95,7 +90,6 @@ export class Katax {
    * await katax.init();
    */
   public constructor() {
-    // Load package.json info immediately
     this.loadPackageJson();
   }
 
@@ -114,9 +108,7 @@ export class Katax {
       const pkg = JSON.parse(content) as { name?: string; version?: string };
       this._appName = pkg.name ?? 'unknown';
       this._appVersion = pkg.version ?? '0.0.0';
-    } catch {
-      // Silently fail - defaults already set
-    }
+    } catch {}
   }
 
   /**
@@ -161,7 +153,6 @@ export class Katax {
       return this;
     }
 
-    // Load .env if requested (before any env access)
     if (config?.loadEnv) {
       try {
         // @ts-expect-error - dotenv is an optional peer dependency
@@ -176,8 +167,6 @@ export class Katax {
 
     this._hooks = config?.hooks ?? null;
     await this._hooks?.beforeInit?.();
-
-    // Pass existing logger to bootstrap so it's reused instead of replaced
     const bootstrapResult = await this._bootstrapService.initialize(
       config,
       this._appName,
@@ -191,17 +180,12 @@ export class Katax {
     this._initialized = true;
 
     this._logger.info({ message: 'Katax initialized (config, logger, cron ready)' });
-
-    // Register process signal handlers (SIGTERM, SIGINT)
     this.registerProcessHandlers();
-
-    // Register with registry if configured
     if (config?.registry) {
       try {
         this._registry = new RegistryService(config.registry, this._logger);
         await this._registry.register();
       } catch (error) {
-        // Registry is optional - warn but don't fail
         this._logger.warn({
           message: 'Failed to register with registry, continuing without it',
           err: error,
@@ -290,10 +274,27 @@ export class Katax {
    *   // use database
    * }
    */
+  public async database(
+    config: DatabaseConfig & { type: 'postgresql' | 'mysql'; required?: true }
+  ): Promise<ISqlDatabase>;
+  public async database(
+    config: DatabaseConfig & { type: 'postgresql' | 'mysql'; required: false }
+  ): Promise<ISqlDatabase | null>;
+  public async database(
+    config: DatabaseConfig & { type: 'mongodb'; required?: true }
+  ): Promise<IMongoDatabase>;
+  public async database(
+    config: DatabaseConfig & { type: 'mongodb'; required: false }
+  ): Promise<IMongoDatabase | null>;
+  public async database(
+    config: DatabaseConfig & { type: 'redis'; required?: true }
+  ): Promise<IRedisDatabase>;
+  public async database(
+    config: DatabaseConfig & { type: 'redis'; required: false }
+  ): Promise<IRedisDatabase | null>;
+  public async database(config: DatabaseConfig): Promise<IDatabaseService | null>;
   public async database(config: DatabaseConfig): Promise<IDatabaseService | null> {
     this.ensureInitialized();
-
-    // Validate name is provided
     if (!config.name) {
       throw new KataxDatabaseError('Database name is required');
     }
@@ -306,7 +307,6 @@ export class Katax {
       return dbOverride;
     }
 
-    // Check if database with this name already exists
     if (this._databases.has(config.name)) {
       this._logger!.debug({
         message: `Database '${config.name}' already exists, returning existing instance`,
@@ -314,7 +314,6 @@ export class Katax {
       return this._databases.get(config.name)!;
     }
 
-    // Check if database is currently being initialized (prevent race condition)
     if (this._pendingDatabases.has(config.name)) {
       this._logger!.debug({
         message: `Database '${config.name}' initialization in progress, waiting...`,
@@ -322,7 +321,6 @@ export class Katax {
       return this._pendingDatabases.get(config.name)!;
     }
 
-    // Create and track the initialization promise
     const initPromise = this.createDatabase(config);
     this._pendingDatabases.set(config.name, initPromise);
 
@@ -334,7 +332,6 @@ export class Katax {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      // If required is explicitly false, log warning and return null instead of throwing
       if (config.required === false) {
         this._logger!.warn({
           message: `Database '${config.name}' connection failed (non-required), continuing without it`,
@@ -343,7 +340,6 @@ export class Katax {
         return null;
       }
 
-      // Default behavior: throw error (fail-fast)
       this._logger!.error({ message: `Failed to create database '${config.name}'`, err: error });
       throw new KataxDatabaseError(
         `Database '${config.name}' initialization failed: ${errorMessage}`,
@@ -385,8 +381,6 @@ export class Katax {
    */
   public async socket(config: WebSocketConfig): Promise<IWebSocketService> {
     this.ensureInitialized();
-
-    // Validate name is provided
     if (!config.name) {
       throw new KataxWebSocketError('WebSocket name is required');
     }
@@ -399,7 +393,6 @@ export class Katax {
       return socketOverride;
     }
 
-    // Check if socket with this name already exists
     if (this._sockets.has(config.name)) {
       this._logger!.debug({
         message: `WebSocket '${config.name}' already exists, returning existing instance`,
@@ -407,7 +400,6 @@ export class Katax {
       return this._sockets.get(config.name)!;
     }
 
-    // Check if socket is currently being initialized (prevent race condition)
     if (this._pendingSockets.has(config.name)) {
       this._logger!.debug({
         message: `WebSocket '${config.name}' initialization in progress, waiting...`,
@@ -415,7 +407,6 @@ export class Katax {
       return this._pendingSockets.get(config.name)!;
     }
 
-    // Create and track the initialization promise
     const initPromise = this.createSocket(config);
     this._pendingSockets.set(config.name, initPromise);
 
@@ -423,7 +414,6 @@ export class Katax {
       const socket = await initPromise;
       this._sockets.set(config.name, socket);
 
-      // Log appropriate message based on mode
       if (config.httpServer) {
         this._logger!.info({
           message: `WebSocket server '${config.name}' attached to HTTP server (shared port)`,
@@ -462,7 +452,6 @@ export class Katax {
     const socket = new WebSocketService(config);
     await socket.init();
 
-    // Connect logger to first socket for broadcasting
     if (this._sockets.size === 0) {
       (this._logger as LoggerService).setSocketService(socket);
       this._logger!.debug({ message: 'Logger connected to WebSocket for broadcasting' });
@@ -490,18 +479,15 @@ export class Katax {
    * Advanced features (broadcast, transports) require init()
    */
   public get logger(): ILoggerService {
-    // Check for override first
     const loggerOverride = this.getOverride<ILoggerService>('logger');
     if (loggerOverride) {
       return loggerOverride;
     }
-
-    // Create default logger if not initialized yet (lazy initialization)
     if (!this._logger) {
       this._logger = new LoggerService({
         level: 'info',
         prettyPrint: this.isDev,
-        enableBroadcast: false, // No broadcast until init()
+        enableBroadcast: false,
       });
     }
 
@@ -616,7 +602,6 @@ export class Katax {
       return cacheOverride;
     }
 
-    // Return cached instance if exists
     if (this._cacheInstances.has(redisName)) {
       return this._cacheInstances.get(redisName)!;
     }
@@ -635,7 +620,7 @@ export class Katax {
       );
     }
 
-    const cacheInstance = new CacheService(redis);
+    const cacheInstance = new CacheService((redis as DatabaseService).asRedis());
     this._cacheInstances.set(redisName, cacheInstance);
     return cacheInstance;
   }
@@ -678,7 +663,6 @@ export class Katax {
 
     const bridgeKey = `${redisName}:${socketName}:${config.streamKey ?? 'katax:logs'}:${config.appName}`;
 
-    // Return cached instance if exists
     if (this._bridges.has(bridgeKey)) {
       return this._bridges.get(bridgeKey)!;
     }
@@ -703,7 +687,12 @@ export class Katax {
       );
     }
 
-    const bridge = new RedisStreamBridgeService(redis, socket, config);
+    const bridge = new RedisStreamBridgeService(
+      (redis as DatabaseService).asRedis(),
+      socket,
+      config,
+      this._logger ?? this.logger
+    );
     this._bridges.set(bridgeKey, bridge);
     return bridge;
   }
@@ -770,12 +759,10 @@ export class Katax {
       });
     }
 
-    const hb = startHeartbeat(redis, opts, socket);
+    const hb = startHeartbeat((redis as DatabaseService).asRedis(), opts, socket);
     this._heartbeats.push(hb);
     return hb;
   }
-
-  // ==================== APP INFO ====================
 
   /**
    * Get the app name from package.json
@@ -847,7 +834,6 @@ export class Katax {
       return defaultValue ?? '';
     }
 
-    // Infer type from defaultValue
     if (typeof defaultValue === 'number') {
       const parsed = Number(value);
       return isNaN(parsed) ? defaultValue : parsed;
@@ -958,7 +944,6 @@ export class Katax {
       return;
     }
 
-    // Run user-defined shutdown hooks first
     if (this._shutdownHooks.length > 0) {
       this._logger?.info({ message: `Running ${this._shutdownHooks.length} shutdown hook(s)...` });
       await Promise.allSettled(
@@ -982,7 +967,6 @@ export class Katax {
     });
     this._registry = shutdownResult.registry;
 
-    // Stop all Redis Stream Bridges
     for (const bridge of this._bridges.values()) {
       try {
         bridge.stop();
@@ -992,7 +976,6 @@ export class Katax {
     }
     this._bridges.clear();
 
-    // Stop all heartbeats
     for (const hb of this._heartbeats) {
       try {
         hb.stop();
@@ -1028,5 +1011,4 @@ export class Katax {
   }
 }
 
-// Export singleton instance for direct import
 export const katax = Katax.getInstance();

@@ -1,4 +1,4 @@
-import type { LogTransport, LogEntry, IDatabaseService } from '../../types.js';
+import type { LogTransport, LogEntry, IRedisDatabase } from '../../types.js';
 
 /**
  * Options for RedisTransport
@@ -71,10 +71,9 @@ export class RedisTransport implements LogTransport {
   private readonly maxLen?: number | undefined;
 
   constructor(
-    private readonly db: IDatabaseService,
+    private readonly db: IRedisDatabase,
     optionsOrKey?: string | RedisTransportOptions
   ) {
-    // Parse options (support both old string API and new options object)
     const options: RedisTransportOptions =
       typeof optionsOrKey === 'string' ? { streamKey: optionsOrKey } : (optionsOrKey ?? {});
 
@@ -82,38 +81,22 @@ export class RedisTransport implements LogTransport {
     this.formatter = options.format;
     this.maxLen = options.maxLen;
 
-    // Setup stream key resolver
     const streamKey = options.streamKey ?? 'katax:logs';
     this.getStreamKey = typeof streamKey === 'function' ? streamKey : () => streamKey;
-
-    // Validation
-    if (db.config?.type !== 'redis') {
-      throw new Error('RedisTransport requires a Redis IDatabaseService');
-    }
-    if (!db.redis) {
-      throw new Error('RedisTransport: provided database service has no redis() method');
-    }
   }
 
   public filter?(_log: LogEntry): boolean {
-    // default: persist everything (filter can be overridden by user)
     return true;
   }
 
   public async send(log: LogEntry): Promise<void> {
-    // Get stream key (can be dynamic based on log)
     const streamKey = this.getStreamKey(log);
-
-    // Use custom formatter or default format
     const formattedFields = this.formatter ? this.formatter(log) : this.defaultFormat(log);
-
-    // Convert object to flat array for XADD
     const fields: string[] = [];
     for (const [key, value] of Object.entries(formattedFields)) {
       fields.push(key, value);
     }
 
-    // Build XADD command with optional MAXLEN
     const xaddArgs: (string | number)[] = [streamKey];
 
     if (this.maxLen !== undefined) {
@@ -122,8 +105,7 @@ export class RedisTransport implements LogTransport {
 
     xaddArgs.push('*', ...fields);
 
-    // XADD <stream> [MAXLEN ~ <count>] * field value [field value ...]
-    await this.db.redis!('XADD', ...xaddArgs);
+    await this.db.redis('XADD', ...xaddArgs);
   }
 
   /**
@@ -147,7 +129,5 @@ export class RedisTransport implements LogTransport {
     return fields;
   }
 
-  public async close(): Promise<void> {
-    // nothing to close here; DB connection handled by DatabaseService
-  }
+  public async close(): Promise<void> {}
 }
