@@ -1,4 +1,18 @@
-import type { IDatabaseService, IWebSocketService } from '../types.js';
+import type {
+  ILoggerService,
+  IRedisDatabase,
+  IWebSocketConnection,
+  IWebSocketService,
+} from '../types.js';
+
+type RedisStreamEntry = [id: string, fields: string[]];
+type RedisStreamResponse = Array<[streamKey: string, entries: RedisStreamEntry[]]>;
+
+interface BridgeLogEntry {
+  id: string;
+  app?: string;
+  [key: string]: unknown;
+}
 
 /**
  * Configuration for Redis Stream Bridge
@@ -62,17 +76,11 @@ export class RedisStreamBridgeService {
   private readonly consumer: string;
 
   constructor(
-    private readonly redis: IDatabaseService,
+    private readonly redis: IRedisDatabase,
     private readonly socket: IWebSocketService,
-    config: RedisStreamBridgeConfig
+    config: RedisStreamBridgeConfig,
+    private readonly logger?: ILoggerService
   ) {
-    if (redis.config?.type !== 'redis') {
-      throw new Error('RedisStreamBridgeService requires a Redis database connection');
-    }
-    if (!redis.redis) {
-      throw new Error('Redis connection does not support redis() method');
-    }
-
     this.appName = config.appName;
     this.streamKey = config.streamKey ?? 'katax:logs';
     this.group = config.group ?? `katax-bridge-${config.appName}`;
@@ -86,11 +94,16 @@ export class RedisStreamBridgeService {
    */
   private async ensureGroup(): Promise<void> {
     try {
-      await this.redis.redis!('XGROUP', 'CREATE', this.streamKey, this.group, '$', 'MKSTREAM');
-    } catch (err: any) {
-      // BUSYGROUP means the group already exists - this is OK
-      if (!String(err).includes('BUSYGROUP')) {
-        console.warn('[RedisStreamBridge] Failed to create consumer group:', err);
+      await this.redis.redis('XGROUP', 'CREATE', this.streamKey, this.group, '$', 'MKSTREAM');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!message.includes('BUSYGROUP')) {
+        this.logger?.warn({
+          message: 'RedisStreamBridge failed to create consumer group',
+          err,
+          streamKey: this.streamKey,
+          group: this.group,
+        });
       }
     }
   }
@@ -98,16 +111,16 @@ export class RedisStreamBridgeService {
   /**
    * Parse Redis stream entry into JSON object
    */
-  private parseEntry(entry: [string, string[]]): any {
+  private parseEntry(entry: RedisStreamEntry): BridgeLogEntry {
     const id = entry[0];
     const fields: string[] = entry[1];
-    const obj: any = { id };
+    const obj: BridgeLogEntry = { id };
 
     for (let i = 0; i < fields.length; i += 2) {
       const key = fields[i];
       const value = fields[i + 1];
 
-      if (!key) continue; // Skip if key is undefined
+      if (!key) continue;
 
       try {
         obj[key] = value ? JSON.parse(value) : value;
@@ -125,58 +138,56 @@ export class RedisStreamBridgeService {
   private async loop(): Promise<void> {
     while (this.running) {
       try {
-        const result = await this.redis.redis!(
+        const result = (await this.redis.redis(
           'XREADGROUP',
           'GROUP',
           this.group,
           this.consumer,
           'BLOCK',
-          String(this.blockTimeout), // ← Convert to string for Redis
+          String(this.blockTimeout),
           'COUNT',
-          String(this.batchSize), // ← Convert to string for Redis
+          String(this.batchSize),
           'STREAMS',
           this.streamKey,
           '>'
-        );
+        )) as RedisStreamResponse | null;
 
         if (!result) continue;
 
-        // result format: [[streamKey, [[id, [field, value, ...]], ...]]]
-        for (const [, entries] of result as [string, [string, string[]][]][]) {
+        for (const [, entries] of result) {
           for (const entry of entries) {
             const log = this.parseEntry(entry);
 
-            // Only process logs from this app
             if (log.app !== this.appName) {
-              // ACK and skip logs from other apps
               try {
-                await this.redis.redis!('XACK', this.streamKey, this.group, log.id);
-              } catch (err) {
-                // Ignore ACK errors
-              }
+                await this.redis.redis('XACK', this.streamKey, this.group, log.id);
+              } catch {}
               continue;
             }
 
             try {
-              // Emit to all connected clients
               this.socket.emit('log', log);
-
-              // Also emit to the app-specific room
               this.socket.emitToRoom(this.appName, 'log', log);
-            } catch (err) {
-              console.warn('[RedisStreamBridge] Failed to emit log via WebSocket:', err);
+            } catch (err: unknown) {
+              this.logger?.warn({
+                message: 'RedisStreamBridge failed to emit log via WebSocket',
+                err,
+                appName: this.appName,
+              });
             }
 
-            // Acknowledge message
             try {
-              await this.redis.redis!('XACK', this.streamKey, this.group, log.id);
-            } catch (err) {
-              // Ignore ACK errors
-            }
+              await this.redis.redis('XACK', this.streamKey, this.group, log.id);
+            } catch {}
           }
         }
-      } catch (err) {
-        console.warn('[RedisStreamBridge] Error reading Redis stream:', err);
+      } catch (err: unknown) {
+        this.logger?.warn({
+          message: 'RedisStreamBridge error reading Redis stream',
+          err,
+          streamKey: this.streamKey,
+          group: this.group,
+        });
         await this.sleep(500);
       }
     }
@@ -186,39 +197,60 @@ export class RedisStreamBridgeService {
    * Attach WebSocket handlers for subscriptions
    */
   private attachSocketHandlers(): void {
-    this.socket.onConnection((socket: any) => {
-      // Handle project subscription
-      socket.on('subscribe-project', async (appName: string) => {
+    this.socket.onConnection((socket: IWebSocketConnection) => {
+      socket.on('subscribe-project', async (data: unknown) => {
+        if (typeof data !== 'string' || data.length === 0) {
+          return;
+        }
+
+        const appName = data;
+
         try {
-          // Fetch recent logs for this project (last 100)
-          const range = await this.redis.redis!('XRANGE', this.streamKey, '-', '+', 'COUNT', '100');
+          const range = (await this.redis.redis(
+            'XRANGE',
+            this.streamKey,
+            '-',
+            '+',
+            'COUNT',
+            '100'
+          )) as RedisStreamEntry[] | null;
 
           if (!range) return;
 
-          const recent: any[] = [];
-          for (const entry of range as [string, string[]][]) {
+          const recent: BridgeLogEntry[] = [];
+          for (const entry of range) {
             const log = this.parseEntry(entry);
             if (log.app === appName) {
               recent.push(log);
             }
           }
 
-          // Send historical logs
           socket.emit('project-history', { app: appName, logs: recent });
-
-          // Join room for real-time updates
           socket.join(appName);
-        } catch (err) {
-          console.warn('[RedisStreamBridge] subscribe-project handler failed:', err);
+        } catch (err: unknown) {
+          this.logger?.warn({
+            message: 'RedisStreamBridge subscribe-project handler failed',
+            err,
+            appName,
+          });
         }
       });
 
-      // Handle unsubscribe
-      socket.on('unsubscribe-project', (appName: string) => {
+      socket.on('unsubscribe-project', (data: unknown) => {
+        if (typeof data !== 'string' || data.length === 0) {
+          return;
+        }
+
+        const appName = data;
+
         try {
           socket.leave(appName);
-        } catch (err) {
-          console.warn('[RedisStreamBridge] unsubscribe-project handler failed:', err);
+        } catch (err: unknown) {
+          this.logger?.warn({
+            message: 'RedisStreamBridge unsubscribe-project handler failed',
+            err,
+            appName,
+          });
         }
       });
     });
@@ -242,8 +274,6 @@ export class RedisStreamBridgeService {
     this.running = true;
     await this.ensureGroup();
     this.attachSocketHandlers();
-
-    // Start the loop (don't await, it runs in background)
     void this.loop();
   }
 

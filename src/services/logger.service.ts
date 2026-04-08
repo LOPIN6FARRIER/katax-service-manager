@@ -44,7 +44,6 @@ export class LoggerService implements ILoggerService {
     inheritBroadcast?: boolean,
     inheritSocket?: IWebSocketService | null
   ) {
-    // Child logger creation path
     if (existingLogger !== undefined) {
       this.logger = existingLogger;
       this.broadcastEnabled = inheritBroadcast ?? false;
@@ -52,7 +51,6 @@ export class LoggerService implements ILoggerService {
       return;
     }
 
-    // Normal initialization path
     this.broadcastEnabled = config?.enableBroadcast ?? false;
 
     const transport = config?.prettyPrint
@@ -142,7 +140,6 @@ export class LoggerService implements ILoggerService {
 
       this.socketService.emit('log', dataToSend, room);
     } catch (error) {
-      // Log broadcast failure locally (don't broadcast to avoid infinite loop)
       this.logger.error({ err: error }, 'Failed to broadcast log');
     }
   }
@@ -151,15 +148,12 @@ export class LoggerService implements ILoggerService {
     const normalized = typeof log === 'string' ? { message: log } : log;
     const { message, broadcast, room, ...metadata } = normalized;
 
-    // Log locally with metadata
     this.logger.trace(metadata, message);
 
-    // Broadcast if requested
     if (broadcast) {
       this.broadcast('trace', message, true, room, metadata);
     }
 
-    // deliver to transports asynchronously
     this.deliverToTransports('trace', { message, ...metadata });
   }
 
@@ -233,7 +227,6 @@ export class LoggerService implements ILoggerService {
    * Respects transport.filter and per-log override `persist` when present.
    */
   private deliverToTransports(level: LogLevel, log: Record<string, unknown>): void {
-    // Attach level, timestamp and appName
     const enriched = {
       ...log,
       level,
@@ -247,7 +240,6 @@ export class LoggerService implements ILoggerService {
 
     for (const t of this.transports) {
       try {
-        // Determine if transport wants this log
         if (persistOverride === false) {
           continue;
         }
@@ -256,20 +248,15 @@ export class LoggerService implements ILoggerService {
           continue;
         }
 
-        // fire-and-forget; log transport errors locally
         void t.send(enriched).catch((err) => {
           try {
             this.logger.warn({ err }, `Transport ${t.name ?? '<anon>'} failed to send log`);
-          } catch (_) {
-            // swallow
-          }
+          } catch {}
         });
       } catch (error) {
         try {
           this.logger.warn({ err: error }, `Transport ${t.name ?? '<anon>'} threw synchronously`);
-        } catch (_) {
-          // swallow
-        }
+        } catch {}
       }
     }
   }

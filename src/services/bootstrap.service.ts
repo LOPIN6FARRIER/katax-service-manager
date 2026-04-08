@@ -11,20 +11,20 @@ export interface BootstrapResult {
 }
 
 export class BootstrapService {
+  /**
+   * Creates the core services used by Katax during bootstrap.
+   */
   public async initialize(
     initConfig?: KataxInitConfig,
     fallbackAppName?: string,
     existingLogger?: ILoggerService
   ): Promise<BootstrapResult> {
     const config = new ConfigService();
-
-    // Reuse existing logger if provided, otherwise create new one
     let logger: ILoggerService;
 
     if (existingLogger) {
       logger = existingLogger;
 
-      // Warn if user tries to reconfigure an already-used logger
       if (initConfig?.logger) {
         console.warn(
           '[Katax] Logger config ignored - logger was already used before init(). ' +

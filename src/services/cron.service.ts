@@ -2,7 +2,6 @@ import cron, { type ScheduledTask } from 'node-cron';
 import pino from 'pino';
 import type { ICronService, CronJobConfig } from '../types.js';
 
-// Internal logger for Cron service
 const logger = pino({ name: 'katax:cron' });
 
 /**
@@ -74,7 +73,6 @@ export class CronService implements ICronService {
       return;
     }
 
-    // Start all enabled jobs
     for (const [name, jobState] of this.jobs.entries()) {
       const isEnabled = this.isJobEnabled(jobState.config);
 
@@ -83,7 +81,6 @@ export class CronService implements ICronService {
       }
     }
 
-    // Run jobs that have runOnInit=true
     for (const [name, jobState] of this.jobs.entries()) {
       const isEnabled = this.isJobEnabled(jobState.config);
 
@@ -104,7 +101,6 @@ export class CronService implements ICronService {
       throw new Error(`Cron job "${job.name}" already exists`);
     }
 
-    // Validate cron expression
     if (!cron.validate(job.schedule)) {
       throw new Error(`Invalid cron expression "${job.schedule}" for job "${job.name}"`);
     }
@@ -117,11 +113,9 @@ export class CronService implements ICronService {
 
     this.jobs.set(job.name, jobState);
 
-    // If service is initialized and job is enabled, start it immediately
     if (this.initialized && this.isJobEnabled(job)) {
       this.startJobInternal(job.name, jobState);
 
-      // If requested, also run once immediately for dynamic jobs
       if (job.runOnInit === true) {
         void this.runOnInitJob(job.name, jobState);
       }
@@ -138,7 +132,6 @@ export class CronService implements ICronService {
       throw new Error(`Cron job "${name}" not found`);
     }
 
-    // Stop the job if it's running
     if (jobState.task) {
       jobState.task.stop();
     }
@@ -217,14 +210,13 @@ export class CronService implements ICronService {
    */
   private isJobEnabled(config: CronJobConfig): boolean {
     if (config.enabled === undefined) {
-      return true; // Default to enabled
+      return true;
     }
 
     if (typeof config.enabled === 'boolean') {
       return config.enabled;
     }
 
-    // It's a function
     try {
       return config.enabled();
     } catch (error) {
@@ -254,7 +246,6 @@ export class CronService implements ICronService {
       }
     );
 
-    // task is created in paused state by default, so start it
     task.start();
 
     jobState.task = task;

@@ -200,7 +200,6 @@ export class RegistryService {
         registry: this.config.url ?? 'custom-handler',
       });
 
-      // Start heartbeat after successful registration
       if (this.hasHeartbeatTarget) {
         this.startHeartbeat();
       }
@@ -240,7 +239,6 @@ export class RegistryService {
       this.sendHeartbeat();
     }, this.config.heartbeatInterval);
 
-    // Prevent timer from keeping the process alive
     this.heartbeatTimer.unref();
   }
 

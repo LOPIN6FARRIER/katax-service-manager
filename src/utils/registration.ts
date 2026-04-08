@@ -1,13 +1,13 @@
 import { hostname, networkInterfaces } from 'os';
-import { type IDatabaseService, type IWebSocketService } from '../types.js';
+import { type IRedisDatabase, type IWebSocketService } from '../types.js';
 
 /**
  * Register current app version into a Redis Stream (katax:events)
- * @param db - IDatabaseService configured for Redis
+ * @param db - IRedisDatabase connection
  * @param opts - fields to include (app, version, port, extra)
  */
 export async function registerVersionToRedis(
-  db: IDatabaseService,
+  db: IRedisDatabase,
   opts: {
     app?: string;
     version?: string;
@@ -15,10 +15,6 @@ export async function registerVersionToRedis(
     extra?: Record<string, unknown>;
   } = {}
 ): Promise<void> {
-  if (db.config?.type !== 'redis') {
-    throw new Error('registerVersionToRedis requires a Redis database connection');
-  }
-
   const app =
     opts.app ?? process.env['KATAX_APP_NAME'] ?? process.env['npm_package_name'] ?? 'unknown';
   const version = opts.version ?? process.env['npm_package_version'] ?? '0.0.0';
@@ -53,7 +49,7 @@ export async function registerVersionToRedis(
     fields.push('meta', JSON.stringify(opts.extra));
   }
 
-  await db.redis!('XADD', 'katax:events', '*', ...fields);
+  await db.redis('XADD', 'katax:events', '*', ...fields);
 }
 
 /**
@@ -76,7 +72,7 @@ function getLocalIp(): string | null {
  * Returns a stop function to cancel the heartbeat.
  */
 export function startHeartbeat(
-  db: IDatabaseService,
+  db: IRedisDatabase,
   opts: {
     app: string;
     port?: number | string;
@@ -88,10 +84,6 @@ export function startHeartbeat(
 ): {
   stop: () => void;
 } {
-  if (db.config?.type !== 'redis') {
-    throw new Error('startHeartbeat requires a Redis database connection');
-  }
-
   const app = opts.app;
   const version = opts.version ?? process.env['npm_package_version'] ?? '0.0.0';
   const pid = process.pid;
@@ -115,22 +107,15 @@ export function startHeartbeat(
       ts: Date.now(),
     };
     try {
-      await db.redis!('SET', key, JSON.stringify(payload), 'EX', String(ttl));
+      await db.redis('SET', key, JSON.stringify(payload), 'EX', String(ttl));
       if (socket) {
         try {
           socket.emit('heartbeat', payload, app);
-        } catch (err) {
-          // swallow; heartbeat should not throw
-          // consumer can check keys existence
-        }
+        } catch {}
       }
-    } catch (err) {
-      // swallow; heartbeat should not throw
-      // consumer can check keys existence
-    }
+    } catch {}
   }
 
-  // start immediately
   void send();
   const timer = setInterval(() => void send(), interval);
 
@@ -147,7 +132,7 @@ export function startHeartbeat(
  * Stores a hash at `katax:project:<app>` and adds the app to the `katax:projects` set.
  */
 export async function registerProjectInRedis(
-  db: IDatabaseService,
+  db: IRedisDatabase,
   opts: {
     app?: string;
     version?: string;
@@ -155,10 +140,6 @@ export async function registerProjectInRedis(
     extra?: Record<string, unknown>;
   } = {}
 ): Promise<void> {
-  if (db.config?.type !== 'redis') {
-    throw new Error('registerProjectInRedis requires a Redis database connection');
-  }
-
   const app =
     opts.app ?? process.env['KATAX_APP_NAME'] ?? process.env['npm_package_name'] ?? 'unknown';
   const version = opts.version ?? process.env['npm_package_version'] ?? '0.0.0';
@@ -191,8 +172,6 @@ export async function registerProjectInRedis(
     fields.push('meta', JSON.stringify(opts.extra));
   }
 
-  // HMSET/HSET with multiple fields
-  await db.redis!('HSET', key, ...fields);
-  // Add to index set
-  await db.redis!('SADD', 'katax:projects', app);
+  await db.redis('HSET', key, ...fields);
+  await db.redis('SADD', 'katax:projects', app);
 }

@@ -31,7 +31,6 @@ export class HealthService {
             .db()
             .command({ ping: 1 });
         } else if (db.query) {
-          // PostgreSQL/MySQL
           await db.query('SELECT 1');
         }
         result.services.databases[name] = true;

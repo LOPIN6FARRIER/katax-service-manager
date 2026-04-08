@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CacheService } from './cache.service.js';
-import type { IDatabaseService } from '../types.js';
+import type { IRedisDatabase } from '../types.js';
 
 describe('CacheService.clear', () => {
   const originalNodeEnv = process.env['NODE_ENV'];
@@ -21,13 +21,12 @@ describe('CacheService.clear', () => {
       .mockImplementationOnce(async () => ['0', ['k3']])
       .mockImplementationOnce(async () => 1);
 
-    const databaseMock: IDatabaseService = {
+    const databaseMock: IRedisDatabase = {
       config: {
         type: 'redis',
         connection: 'redis://localhost:6379',
       },
       init: async () => undefined,
-      query: async <T>() => [] as unknown as T,
       getClient: async () => ({}),
       redis,
       close: async () => undefined,
@@ -48,13 +47,12 @@ describe('CacheService.clear', () => {
     process.env['NODE_ENV'] = 'production';
 
     const redis = vi.fn();
-    const databaseMock: IDatabaseService = {
+    const databaseMock: IRedisDatabase = {
       config: {
         type: 'redis',
         connection: 'redis://localhost:6379',
       },
       init: async () => undefined,
-      query: async <T>() => [] as unknown as T,
       getClient: async () => ({}),
       redis,
       close: async () => undefined,

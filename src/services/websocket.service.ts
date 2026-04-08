@@ -1,9 +1,8 @@
 import { Server as SocketIOServer } from 'socket.io';
 import type { Server as HttpServer } from 'http';
 import pino from 'pino';
-import type { IWebSocketService, WebSocketConfig } from '../types.js';
+import type { IWebSocketConnection, IWebSocketService, WebSocketConfig } from '../types.js';
 
-// Internal logger for WebSocket service
 const logger = pino({ name: 'katax:websocket' });
 
 /**
@@ -44,15 +43,12 @@ export class WebSocketService implements IWebSocketService {
               credentials: false,
             });
 
-      // Mode 1: Attached to existing HTTP server (same port as Express)
       if (this.config.httpServer) {
         logger.info('Attaching Socket.IO to existing HTTP server');
         this.io = new SocketIOServer(this.config.httpServer as HttpServer, {
           cors: corsConfig,
         });
-      }
-      // Mode 2: Standalone server (separate port)
-      else {
+      } else {
         const port = this.config.port ?? 3001;
         logger.info({ port }, 'Creating standalone Socket.IO server');
         this.io = new SocketIOServer(port, {
@@ -60,7 +56,6 @@ export class WebSocketService implements IWebSocketService {
         });
       }
 
-      // Handle authentication if enabled
       if (this.config.enableAuth) {
         if (!this.config.authToken && !this.config.authValidator) {
           throw new Error(
@@ -92,18 +87,15 @@ export class WebSocketService implements IWebSocketService {
         });
       }
 
-      // Handle connections
       this.io.on('connection', (socket) => {
         logger.info({ socketId: socket.id }, 'WebSocket client connected');
 
-        // Handle room joining
         socket.on('join-room', (room: string) => {
           socket.join(room);
           logger.info({ socketId: socket.id, room }, 'Client joined room');
           socket.emit('room-joined', { room });
         });
 
-        // Handle room leaving
         socket.on('leave-room', (room: string) => {
           socket.leave(room);
           logger.info({ socketId: socket.id, room }, 'Client left room');
@@ -193,11 +185,11 @@ export class WebSocketService implements IWebSocketService {
    *   });
    * });
    */
-  public onConnection(handler: (socket: unknown) => void): void {
+  public onConnection(handler: (socket: IWebSocketConnection) => void): void {
     if (!this.initialized || !this.io) {
       throw new Error('WebSocket not initialized. Call init() first.');
     }
-    this.io.on('connection', handler);
+    this.io.on('connection', (socket) => handler(socket));
   }
 
   /**
