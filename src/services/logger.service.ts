@@ -62,6 +62,7 @@ export class LoggerService implements ILoggerService {
             ignore: 'pid,hostname',
             customLevels: 'success:35',
             customColors: 'success:blue',
+            useOnlyCustomProps: false,
           },
         }
       : config?.destination
