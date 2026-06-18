@@ -48,6 +48,13 @@ export interface RedisStreamBridgeConfig {
    * @default 2000
    */
   blockTimeout?: number;
+
+  /**
+   * Max consecutive retries on error before stopping.
+   * Set to 0 for unlimited retries.
+   * @default 5
+   */
+  maxRetries?: number;
 }
 
 /**
@@ -74,6 +81,8 @@ export class RedisStreamBridgeService {
   private readonly batchSize: number;
   private readonly blockTimeout: number;
   private readonly consumer: string;
+  private readonly maxRetries: number;
+  private consecutiveRetries = 0;
 
   constructor(
     private readonly redis: IRedisDatabase,
@@ -87,6 +96,7 @@ export class RedisStreamBridgeService {
     this.batchSize = config.batchSize ?? 10;
     this.blockTimeout = config.blockTimeout ?? 2000;
     this.consumer = `bridge-${process.pid}-${Date.now()}`;
+    this.maxRetries = config.maxRetries ?? 5;
   }
 
   /**
@@ -152,6 +162,8 @@ export class RedisStreamBridgeService {
           '>'
         )) as RedisStreamResponse | null;
 
+        this.consecutiveRetries = 0;
+
         if (!result) continue;
 
         for (const [, entries] of result) {
@@ -182,11 +194,38 @@ export class RedisStreamBridgeService {
           }
         }
       } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        const isNoGroup = message.includes('NOGROUP');
+
+        if (isNoGroup) {
+          this.logger?.warn({
+            message: 'RedisStreamBridge stream or group missing, attempting to recreate',
+            streamKey: this.streamKey,
+            group: this.group,
+          });
+          await this.ensureGroup();
+        }
+
+        this.consecutiveRetries++;
+
+        if (this.maxRetries > 0 && this.consecutiveRetries >= this.maxRetries) {
+          this.logger?.error({
+            message: `RedisStreamBridge exceeded max retries (${this.maxRetries}), stopping`,
+            err,
+            streamKey: this.streamKey,
+            group: this.group,
+            retries: this.consecutiveRetries,
+          });
+          this.running = false;
+          break;
+        }
+
         this.logger?.warn({
           message: 'RedisStreamBridge error reading Redis stream',
           err,
           streamKey: this.streamKey,
           group: this.group,
+          retry: `${this.consecutiveRetries}/${this.maxRetries}`,
         });
         await this.sleep(500);
       }

@@ -1,4 +1,4 @@
----
+﻿---
 name: katax-ecosystem
 description: 'Expert guidance for building Node.js APIs with the Katax ecosystem (katax-core validation, katax-service-manager singleton, katax-cli scaffolding). Use when: working with katax packages, setting up bootstrap, adding endpoints, validating requests, configuring databases/WebSocket/cron/cache, troubleshooting initialization order, implementing graceful shutdown.'
 argument-hint: 'What aspect of Katax are you working with? (validation/bootstrap/cli/troubleshooting)'
@@ -39,7 +39,7 @@ Expert guidance for the **Katax ecosystem**: three TypeScript packages for build
 
 ---
 
-## 1. katax-core — Validation Library
+## 1. katax-core â€” Validation Library
 
 Zod-inspired schema validation for request bodies, env vars, and runtime type-checking. Lightweight with only `date-fns` as dependency.
 
@@ -62,7 +62,7 @@ if (!result.success) {
 }
 ```
 
-### Core API — Schema Interface
+### Core API â€” Schema Interface
 
 Every schema implements:
 
@@ -88,7 +88,7 @@ Schema<T> {
 - `Issue`: `{ path: (string | number)[]; message: string }`
 - `KataxError`: Custom error class with `issues: Issue[]` property
 
-### The k() API — All Factory Functions
+### The k() API â€” All Factory Functions
 
 ```ts
 const k = {
@@ -107,7 +107,7 @@ const k = {
 };
 ```
 
-### String Schema — `k.string()`
+### String Schema â€” `k.string()`
 
 | Method                      | Description                    |
 | --------------------------- | ------------------------------ |
@@ -133,7 +133,7 @@ const k = {
 | `nonempty(msg?)`            | Cannot be empty                |
 | `trim(msg?)`                | No leading/trailing whitespace |
 
-### Number Schema — `k.number()`
+### Number Schema â€” `k.number()`
 
 | Method                      | Description                |
 | --------------------------- | -------------------------- |
@@ -153,7 +153,7 @@ const k = {
 | `notOneOf(options[], msg?)` | Must not be one of options |
 | `nonempty(msg?)`            | Alias for min(1)           |
 
-### Boolean Schema — `k.boolean()`
+### Boolean Schema â€” `k.boolean()`
 
 | Method                   | Description      |
 | ------------------------ | ---------------- |
@@ -161,7 +161,7 @@ const k = {
 | `isFalse(msg?)`          | Must be false    |
 | `equals(expected, msg?)` | Must equal value |
 
-### Object Schema — `k.object(shape)`
+### Object Schema â€” `k.object(shape)`
 
 ```ts
 const schema = k.object({
@@ -183,7 +183,7 @@ const schema = k.object({
 | `getShape()`        | Get raw shape object           |
 | `caseInsensitive()` | Case-insensitive field lookup  |
 
-### Array Schema — `k.array(elementSchema?)`
+### Array Schema â€” `k.array(elementSchema?)`
 
 | Method                    | Description                          |
 | ------------------------- | ------------------------------------ |
@@ -194,7 +194,7 @@ const schema = k.object({
 | `unique(msg?)`            | All elements unique (deep equality)  |
 | `contains(element, msg?)` | Must contain element (deep equality) |
 
-### Email Schema — `k.email()`
+### Email Schema â€” `k.email()`
 
 | Method                          | Description                          |
 | ------------------------------- | ------------------------------------ |
@@ -205,11 +205,11 @@ const schema = k.object({
 | `localMinLength(n, msg?)`       | Min length for local part            |
 | `localMaxLength(n, msg?)`       | Max length for local part            |
 | `localPattern(regex, msg?)`     | Pattern for local part               |
-| `corporate(msg?)`               | Block free providers (Gmail, Yahoo…) |
+| `corporate(msg?)`               | Block free providers (Gmail, Yahooâ€¦) |
 | `noPlus(msg?)`                  | Disallow '+' addressing              |
 | `noDots(msg?)`                  | Disallow '.' in local part           |
 
-### Date Schema — `k.date()`
+### Date Schema â€” `k.date()`
 
 Input: ISO 8601 date strings. Output: Date object. Uses `date-fns`.
 
@@ -225,7 +225,7 @@ Input: ISO 8601 date strings. Output: Date object. Uses `date-fns`.
 | `hasTime(msg?)`             | Must include time component          |
 | `formatOutput(format)`      | Transform output to formatted string |
 
-### TwoDates Schema — `k.twoDates(separator?)`
+### TwoDates Schema â€” `k.twoDates(separator?)`
 
 Input: Two ISO dates separated by `separator` (default `'|'`). Output: `[Date, Date]`.
 
@@ -237,7 +237,7 @@ Input: Two ISO dates separated by `separator` (default `'|'`). Output: `[Date, D
 | `minDifferenceHours(hours, msg?)` | Min hours apart                 |
 | `order(ascending, msg?)`          | Chronological order enforcement |
 
-### File Schema — `k.file()`
+### File Schema â€” `k.file()`
 
 Works with Browser File API and Node.js Multer objects.
 
@@ -256,7 +256,7 @@ Works with Browser File API and Node.js Multer objects.
 | `audio(msg?)`                | Shortcut: `audio/*`                   |
 | `document(msg?)`             | Shortcut: PDF, Word, Excel, plaintext |
 
-### Base64 Schema — `k.base64()`
+### Base64 Schema â€” `k.base64()`
 
 Input: Base64 string (optionally with data URL prefix). Browser + Node.js compatible.
 
@@ -274,13 +274,13 @@ Input: Base64 string (optionally with data URL prefix). Browser + Node.js compat
 ### Union, Intersection, Lazy
 
 ```ts
-// Union — matches at least one schema (short-circuits on first match)
+// Union â€” matches at least one schema (short-circuits on first match)
 k.union([k.string(), k.number()]);
 
-// Intersection — must match ALL schemas (merges objects)
+// Intersection â€” must match ALL schemas (merges objects)
 k.intersection([k.object({ id: k.number() }), k.object({ name: k.string() })]);
 
-// Lazy — deferred resolution for recursive types
+// Lazy â€” deferred resolution for recursive types
 const categorySchema = k.lazy(() =>
   k.object({
     name: k.string(),
@@ -301,7 +301,7 @@ k.unknown(); // Accepts all (forces narrowing)
 k.never(); // Never matches
 ```
 
-### Custom Schema — `k.custom<T>(validator)`
+### Custom Schema â€” `k.custom<T>(validator)`
 
 ```ts
 const positiveEven = k.custom<number>((value, path) => {
@@ -323,20 +323,20 @@ schema.default(42)           // Returns default if undefined
 schema.transform((v) => ...) // Transform output type
 ```
 
-### Coercion — `k.coerce`
+### Coercion â€” `k.coerce`
 
 Auto-converts before validation:
 
 ```ts
-k.coerce.number(); // "42" → 42, true → 1
-k.coerce.boolean(); // "true"/"1"/"yes"/"on" → true, "false"/"0"/"no"/"off" → false
-k.coerce.string(); // 42 → "42", null → ""
-k.coerce.date(); // ISO string → Date, timestamp → Date
+k.coerce.number(); // "42" â†’ 42, true â†’ 1
+k.coerce.boolean(); // "true"/"1"/"yes"/"on" â†’ true, "false"/"0"/"no"/"off" â†’ false
+k.coerce.string(); // 42 â†’ "42", null â†’ ""
+k.coerce.date(); // ISO string â†’ Date, timestamp â†’ Date
 ```
 
 All coerced schemas inherit their base schema methods.
 
-### Preprocess — `k.preprocess(fn, schema)`
+### Preprocess â€” `k.preprocess(fn, schema)`
 
 Transform input BEFORE validation:
 
@@ -387,7 +387,7 @@ function validate<T>(schema: { safeParse(v: unknown): any }) {
 }
 ```
 
-### API Example — Email + File + Base64
+### API Example â€” Email + File + Base64
 
 ```ts
 const profileSchema = k
@@ -408,7 +408,7 @@ const profileSchema = k
 
 ---
 
-## 2. katax-service-manager — Application Bootstrap
+## 2. katax-service-manager â€” Application Bootstrap
 
 Singleton service container managing the full lifecycle: config, logger, databases, WebSocket, cron, cache, registry, health, graceful shutdown.
 
@@ -442,19 +442,19 @@ await katax.init({
 });
 ```
 
-### ⚠️ Critical Initialization Order
+### âš ï¸ Critical Initialization Order
 
 ```ts
-// ✅ CORRECT — Option 1: Manual dotenv
+// âœ… CORRECT â€” Option 1: Manual dotenv
 import dotenv from 'dotenv';
 dotenv.config();
 import { katax } from 'katax-service-manager';
 
-// ✅ CORRECT — Option 2: Built-in loadEnv (v0.5+)
+// âœ… CORRECT â€” Option 2: Built-in loadEnv (v0.5+)
 import { katax } from 'katax-service-manager';
 await katax.init({ loadEnv: true });
 
-// ❌ WRONG — katax reads env at import time, before dotenv
+// âŒ WRONG â€” katax reads env at import time, before dotenv
 import { katax } from 'katax-service-manager';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -591,13 +591,13 @@ await katax.database({
   },
 });
 
-// Retrieve — generic
+// Retrieve â€” generic
 const db = katax.db('main');
 
-// Retrieve — type-cast methods
-db.asSql();    // → ISqlDatabase (throws if not PostgreSQL/MySQL)
-db.asMongo();  // → IMongoDatabase (throws if not MongoDB)
-db.asRedis();  // → IRedisDatabase (throws if not Redis)
+// Retrieve â€” type-cast methods
+db.asSql();    // â†’ ISqlDatabase (throws if not PostgreSQL/MySQL)
+db.asMongo();  // â†’ IMongoDatabase (throws if not MongoDB)
+db.asRedis();  // â†’ IRedisDatabase (throws if not Redis)
 ```
 
 #### Typed Interfaces
@@ -735,14 +735,14 @@ log.info({ message: 'Payment processed' });
 ```ts
 import { RedisTransport, TelegramTransport, CallbackTransport } from 'katax-service-manager';
 
-// Redis — persist logs to Redis Stream
+// Redis â€” persist logs to Redis Stream
 const redis = new RedisTransport(katax.db('cache'), {
   streamKey: 'katax:logs',
 });
 redis.filter = (log) => log.level === 'error' || log.persist === true;
 katax.logger.addTransport(redis);
 
-// Telegram — critical alerts
+// Telegram â€” critical alerts
 const telegram = new TelegramTransport({
   botToken: katax.envRequired('TELEGRAM_BOT_TOKEN'),
   chatId: katax.envRequired('TELEGRAM_ALERTS_CHAT_ID'),
@@ -753,7 +753,7 @@ const telegram = new TelegramTransport({
 });
 katax.logger.addTransport(telegram);
 
-// Callback — custom handler
+// Callback â€” custom handler
 const callback = new CallbackTransport({
   name: 'custom',
   send: async (log) => {
@@ -784,7 +784,7 @@ interface WebSocketConfig {
 ```
 
 ```ts
-// Attached to Express (shared port — preferred)
+// Attached to Express (shared port â€” preferred)
 const httpServer = createServer(app);
 await katax.socket({
   name: 'main',
@@ -912,7 +912,7 @@ bridge.isRunning();
 bridge.stop();
 
 // Client events:
-// subscribe-project(appName) → 'project-history' + 'log'
+// subscribe-project(appName) â†’ 'project-history' + 'log'
 // unsubscribe-project(appName)
 ```
 
@@ -1003,7 +1003,7 @@ void bootstrap();
 
 ---
 
-## 3. katax-cli — Project & Endpoint Generator
+## 3. katax-cli â€” Project & Endpoint Generator
 
 CLI tool for scaffolding katax-based APIs and managing VPS deployments.
 
@@ -1122,9 +1122,9 @@ katax fix list         # List available patches
 
 ### Initialization Order
 
-1. ✅ Use either manual `dotenv.config()` before importing `katax` or `await katax.init({ loadEnv: true })`
-2. ✅ ALWAYS call `katax.init()` before using runtime services
-3. ❌ NEVER use `katax.db()` or `katax.ws()` before `katax.init()` completes
+1. âœ… Use either manual `dotenv.config()` before importing `katax` or `await katax.init({ loadEnv: true })`
+2. âœ… ALWAYS call `katax.init()` before using runtime services
+3. âŒ NEVER use `katax.db()` or `katax.ws()` before `katax.init()` completes
 
 ### Database Operations
 
@@ -1138,21 +1138,21 @@ katax fix list         # List available patches
 
 - Strings and objects are both valid
 - Use objects for metadata: `{ message, ...meta }`
-- `broadcast: true` → emits to WebSocket
-- `persist: true` → forces Redis transport
-- `skipTransport: true` → avoids feedback loops
-- `skipTelegram: true` / `skipRedis: true` → selective skip
+- `broadcast: true` â†’ emits to WebSocket
+- `persist: true` â†’ forces Redis transport
+- `skipTransport: true` â†’ avoids feedback loops
+- `skipTelegram: true` / `skipRedis: true` â†’ selective skip
 
 ### Validation
 
 - Always validate `req.body` with `.safeParse()`
-- Use `coerce` for query params (strings → numbers/booleans)
+- Use `coerce` for query params (strings â†’ numbers/booleans)
 - Use `asyncRefine` for database checks (unique username, etc.)
 - Prefer `minLength`/`maxLength` for strings
 
 ### Optional Services
 
-- `required: false` on databases → app continues if connection fails
+- `required: false` on databases â†’ app continues if connection fails
 - Always check service existence before accessing
 
 ---
@@ -1177,7 +1177,7 @@ katax fix list         # List available patches
 
 ### Database query TypeScript error
 
-**Fix**: SQL → `db.query()`, MongoDB → `db.getClient().db().collection()`, Redis → `db.getClient()`.
+**Fix**: SQL â†’ `db.query()`, MongoDB â†’ `db.getClient().db().collection()`, Redis â†’ `db.getClient()`.
 
 ---
 
@@ -1195,736 +1195,3 @@ katax fix list         # List available patches
 - [ ] Validate all request bodies with katax-core
 
 ---
-
-name: katax-ecosystem
-description: 'Expert guidance for building Node.js APIs with the Katax ecosystem (katax-core validation, katax-service-manager singleton, katax-cli scaffolding). Use when: working with katax packages, setting up bootstrap, adding endpoints, validating requests, configuring databases/WebSocket/cron, troubleshooting initialization order, implementing graceful shutdown.'
-argument-hint: 'What aspect of Katax are you working with? (validation/bootstrap/cli/troubleshooting)'
-
----
-
-# Katax Ecosystem
-
-Expert guidance for the **Katax ecosystem**: three internal TypeScript packages for building and maintaining Node.js APIs on self-hosted VPS infrastructure (PM2 + Ubuntu).
-
-## Current Versions (April 2026)
-
-- `katax-core`: `1.5.4`
-- `katax-service-manager`: `0.5.3`
-- `katax-cli`: `1.4.4`
-
-## Latest Practical Updates
-
-- Prefer architecture: `validator -> controller -> handler -> routes`.
-- Use shared `validateSchema` helper for consistent validation responses.
-- Prefer typed repository access generated by CLI (`ISqlDatabase` / `IMongoDatabase`).
-- `katax-cli init` defaults to `pnpm` and supports `--ignore-scripts` + `--write-npmrc`.
-- Nested resources (e.g. `admin/users`) are supported by generators and should keep relative imports correct.
-- Redis reconnect is built-in in modern `katax-service-manager`; only customize reconnect for external custom clients.
-
-## Ecosystem Snapshot
-
-### katax-core (`1.5.4`)
-
-- Main entry point: `k`
-- Main builders: `string`, `number`, `boolean`, `object`, `array`, `date`, `twoDates`, `email`, `base64`, `file`
-- Composition builders: `union`, `intersection`, `literal`, `enum`, `tuple`, `record`, `lazy`, `custom`
-- Helpers: `coerce`, `preprocess`, `createIssue`, `issues`, `mergeIssues`, `isIssueArray`
-- Key types: `kataxInfer`, `Issue`, `Path`, `SafeParseResult`, `AsyncSafeParseResult`, `AsyncValidator`
-
-### katax-service-manager (`0.5.3`)
-
-- Main exports: `Katax`, `katax`
-- Main services: `ConfigService`, `LoggerService`, `DatabaseService`, `WebSocketService`, `CronService`, `CacheService`, `RegistryService`, `RedisStreamBridgeService`
-- Transports: `RedisTransport`, `CallbackTransport`, `TelegramTransport`
-- Key methods: `init`, `shutdown`, `env`, `envRequired`, `database`, `db`, `socket`, `cron`, `cache`, `heartbeat`, `healthCheck`
-- Key typed interfaces: `ISqlDatabase`, `IMongoDatabase`, `IRedisDatabase`, `IWebSocketService`, `ICronService`
-
-### katax-cli (`1.4.4`)
-
-- Main commands: `init`, `add endpoint`, `generate crud`, `generate repository`, `generate docs`, `info`
-- Ops commands: `deploy init|update|rollback|logs|status`, `fix docs|all|list`
-- Current guarantees: nested resources supported, typed repository scaffolds, OpenAPI generation/fixes, `pnpm`-first init flags
-
-## When to Use
-
-- Setting up a new Katax-based API project
-- Adding request validation with katax-core schemas
-- Configuring services with katax-service-manager
-- Troubleshooting initialization order or service connection issues
-- Implementing WebSocket, cron jobs, or Redis integration
-- Setting up proper logging, transports, and monitoring
-- Generating endpoints with katax-cli
-- Explaining concrete exports, types, and responsibilities of a Katax package
-- Updating docs to match current published versions and current generator behavior
-
-## The Three Packages
-
-### 1. katax-core — Validation Library
-
-Zod-inspired schema validation for request bodies, env vars, and runtime type-checking.
-
-#### Quick Start
-
-```ts
-import { k, type kataxInfer } from 'katax-core';
-
-const UserSchema = k.object({
-  email: k.email(),
-  name: k.string().min(2).max(100),
-  age: k.number().min(18).optional(),
-});
-
-type User = kataxInfer<typeof UserSchema>;
-
-const result = UserSchema.safeParse(req.body);
-if (!result.success) {
-  return res.status(400).json({ errors: result.issues });
-}
-```
-
-#### Schema Primitives
-
-- `k.string()`, `k.number()`, `k.boolean()`, `k.date()`
-- `k.email()`, `k.any()`, `k.unknown()`, `k.never()`
-- `k.literal('value')`, `k.enum(['a', 'b'] as const)`
-
-#### Additional Public Builders
-
-- `k.base64()`, `k.file()`, `k.twoDates()`
-- `k.tuple([...])`, `k.record(schema)`, `k.custom(validator)`
-- `k.union([...])`, `k.intersection([...])`, `k.lazy(() => schema)`
-
-#### Modifiers (chainable)
-
-- `.min(n)`, `.max(n)`, `.int()`
-- `.optional()` → `T | undefined`
-- `.nullable()` → `T | null`
-- `.default(value)`, `.catch(fallback)`
-- `.transform(fn)`, `.asyncRefine(fn)`
-
-#### Composites
-
-- `k.array(schema)`
-- `k.record(schema)` → `Record<string, T>`
-- `k.tuple([schema1, schema2])`
-- `k.union([schema1, schema2])`
-- `k.intersection([schema1, schema2])`
-- `k.lazy(() => schema)` — for recursive types
-
-#### Coercion (query params / form data)
-
-```ts
-import { coerce } from 'katax-core';
-
-coerce.number(); // "42" → 42
-coerce.boolean(); // "true" / "1" → true
-coerce.date(); // ISO string → Date
-```
-
-#### Express Validation Middleware
-
-```ts
-function validate<T>(schema: { safeParse(v: unknown): any }) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const result = schema.safeParse(req.body);
-    if (!result.success) {
-      return res.status(400).json({ errors: result.issues });
-    }
-    req.body = result.data;
-    next();
-  };
-}
-
-router.post('/posts', validate(CreatePostSchema), handler);
-```
-
-#### Documentation Guidance for katax-core
-
-- Be explicit about runtime validation vs TypeScript inference.
-- Mention `kataxInfer` when a schema drives handler/controller types.
-- Prefer `minLength` and `maxLength` in examples for strings.
-- Use `safeParse` / `safeParseAsync` by default in API examples.
-
----
-
-### 2. katax-service-manager — Application Bootstrap
-
-Singleton service container managing the full lifecycle: config, logger, databases, WebSocket, cron, cache, graceful shutdown.
-
-#### Public Surface Summary
-
-- Core exports: `Katax`, `katax`
-- Services: `ConfigService`, `LoggerService`, `DatabaseService`, `WebSocketService`, `CronService`, `CacheService`, `RegistryService`, `RedisStreamBridgeService`
-- Errors: `KataxServiceError`, `KataxConfigError`, `KataxNotInitializedError`, `KataxDatabaseError`, `KataxRedisError`, `KataxWebSocketError`, `KataxRegistryError`
-- Transports: `RedisTransport`, `CallbackTransport`, `TelegramTransport`
-- Registration helpers: `registerVersionToRedis`, `startHeartbeat`, `registerProjectInRedis`
-
-#### ⚠️ Critical Initialization Order
-
-```ts
-// ✅ CORRECT ORDER - Option 1: Manual dotenv
-import dotenv from 'dotenv';
-dotenv.config(); // 1. Load env vars FIRST
-import { katax } from 'katax-service-manager'; // 2. Import katax AFTER dotenv
-
-// ✅ CORRECT ORDER - Option 2: Built-in loadEnv (v0.5+)
-import { katax } from 'katax-service-manager';
-await katax.init({ loadEnv: true }); // Loads .env automatically
-
-// ❌ WRONG — katax reads env at import time, before dotenv loads
-import { katax } from 'katax-service-manager';
-import dotenv from 'dotenv';
-dotenv.config();
-```
-
-**Why**: The katax singleton is instantiated at import time. If dotenv runs after, environment variables will be undefined when katax reads them. From v0.5+, you can use `loadEnv: true` option instead.
-
-#### Bootstrap Template
-
-```ts
-import dotenv from 'dotenv';
-dotenv.config();
-
-import { katax } from 'katax-service-manager';
-import { createServer } from 'http';
-import app from './app.js';
-
-async function bootstrap(): Promise<void> {
-  try {
-    // Step 1: Initialize katax (config, logger, cron)
-    await katax.init({
-      loadEnv: true, // Load .env automatically (v0.5+)
-      logger: {
-        level: katax.env('LOG_LEVEL', 'info') as any,
-        prettyPrint: katax.isDev,
-        enableBroadcast: true,
-      },
-    });
-
-    // Step 2: Setup databases
-    await katax.database({
-      name: 'main',
-      type: 'postgresql',
-      connection: {
-        host: katax.envRequired('DB_HOST'),
-        port: katax.env('DB_PORT', 5432),
-        database: katax.envRequired('DB_NAME'),
-        user: katax.envRequired('DB_USER'),
-        password: katax.envRequired('DB_PASSWORD'),
-      },
-      pool: { max: 10, min: 2 },
-    });
-
-    // Step 3: Setup WebSocket
-    const PORT = katax.env('PORT', '3000');
-    const httpServer = createServer(app);
-
-    await katax.socket({
-      name: 'main',
-      httpServer,
-      cors: { origin: '*' },
-    });
-
-    // Step 4: Start server
-    httpServer.listen(PORT, () => {
-      katax.logger.info({ message: `Server running on http://localhost:${PORT}` });
-    });
-
-    // Step 5: Graceful shutdown handlers
-    process.on('SIGTERM', () => void shutdown('SIGTERM'));
-    process.on('SIGINT', () => void shutdown('SIGINT'));
-  } catch (err) {
-    console.error('Bootstrap failed:', err);
-    process.exit(1);
-  }
-}
-
-const shutdown = async (signal: string) => {
-  katax.logger.info({ message: `${signal} received, shutting down...` });
-  await katax.shutdown();
-  process.exit(0);
-};
-
-void bootstrap();
-```
-
-#### Environment Helpers
-
-```ts
-katax.env('PORT', '3000'); // string with default
-katax.env('PORT', 3000); // number (auto-cast)
-katax.env('DEBUG', false); // boolean (auto-cast)
-katax.envRequired('JWT_SECRET'); // throws if missing
-
-katax.isDev; // NODE_ENV === 'development' or not set
-katax.isProd; // NODE_ENV === 'production'
-katax.isTest; // NODE_ENV === 'test'
-katax.nodeEnv; // raw NODE_ENV string
-katax.appName; // from package.json (name)
-katax.version; // from package.json (version)
-```
-
-#### Database Configuration
-
-```ts
-// PostgreSQL
-await katax.database({
-  name: 'main',
-  type: 'postgresql',
-  connection: {
-    host:     katax.envRequired('DB_HOST'),
-    port:     katax.env('DB_PORT', 5432),
-    database: katax.envRequired('DB_NAME'),
-    user:     katax.envRequired('DB_USER'),
-    password: katax.envRequired('DB_PASSWORD'),
-  },
-  pool: { max: 10, min: 2 },
-});
-
-// Redis
-await katax.database({
-  name: 'cache',
-  type: 'redis',
-  connection: {
-    host:     katax.env('REDIS_HOST', '127.0.0.1'),
-    port:     katax.env('REDIS_PORT', 6379),
-    password: katax.env('REDIS_PASSWORD', ''),
-    db:       0,
-  },
-});
-
-// Optional database (app continues if connection fails)
-await katax.database({
-  name: 'analytics',
-  type: 'postgresql',
-  required: false,  // ←  won't crash on failure
-  connection: { ... },
-});
-```
-
-#### ⚠️ Redis Reconnect Strategy
-
-From v0.5+, reconnect strategy is **built-in by default**. No manual configuration needed.
-
-```ts
-// Automatic reconnect (v0.5+)
-await katax.database({
-  name: 'cache',
-  type: 'redis',
-  connection: { host: '127.0.0.1', port: 6379 },
-});
-// Reconnect strategy already included!
-```
-
-For custom Redis clients outside katax:
-
-```ts
-import { createClient } from 'redis';
-
-const client = createClient({
-  url: 'redis://localhost:6379',
-  socket: {
-    reconnectStrategy: (retries) => Math.min(retries * 100, 3000),
-  },
-});
-```
-
-#### Database Access
-
-```ts
-// SQL databases (PostgreSQL, MySQL)
-const db = katax.db('main');
-const rows = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
-
-// Preferred when type is known (typed overload)
-const sqlDb = katax.database('main', 'postgresql');
-const typedRows = await sqlDb.query('SELECT * FROM users WHERE active = $1', [true]);
-
-// MongoDB must use getClient()
-const db = katax.db('mongo');
-const client = db.getClient();
-const users = await client.db('mydb').collection('users').find({});
-
-// Preferred typed Mongo access
-const mongoDb = katax.database('analytics', 'mongodb');
-const mongoClient = await mongoDb.getClient();
-
-// Redis operations
-const redis = katax.db('cache');
-const client = redis.getClient();
-await client.set('key', 'value', { EX: 3600 });
-```
-
-#### Documentation Guidance for katax-service-manager
-
-- Explain bootstrap order whenever env loading is involved.
-- Distinguish `database(config)` for creation from `database(name, type)` / `db(name)` for retrieval.
-- Prefer typed retrieval examples using `ISqlDatabase`, `IMongoDatabase`, `IRedisDatabase`.
-- Mention built-in Redis reconnect for current versions.
-
-#### Logger (Structured)
-
-All log methods accept **string or object**:
-
-```ts
-// Simple strings (v0.5+)
-katax.logger.info('Server started');
-katax.logger.error('Connection failed');
-
-// Full objects
-katax.logger.info({ message: 'Server started', port: 3000 });
-katax.logger.warn({ message: 'Redis unavailable', err });
-katax.logger.error({ message: 'Query failed', err, query: sql });
-katax.logger.debug({ message: 'Cache hit', key });
-
-// Broadcast to WebSocket clients
-katax.logger.info({
-  message: 'Trade executed',
-  broadcast: true,
-  trade: { symbol: 'BTC', amount: 1.5 },
-});
-
-// Broadcast to specific room
-katax.logger.warn({
-  message: 'Alert triggered',
-  broadcast: true,
-  room: 'admins',
-  alert: { type: 'high-load' },
-});
-
-// Force persist to Redis transport
-katax.logger.info({ message: 'Critical event', persist: true });
-
-// Skip transports (avoid feedback loops)
-katax.logger.warn({ message: 'Transport failed', skipTransport: true });
-
-// Child logger with bound context
-const log = katax.logger.child({ service: 'spotify', userId: 123 });
-log.info({ message: 'Token refreshed' });
-```
-
-#### Transports
-
-```ts
-import { RedisTransport, TelegramTransport } from 'katax-service-manager';
-
-// Redis transport — persist logs to Redis Stream
-const redisTransport = new RedisTransport(katax.db('cache'), 'katax:logs');
-redisTransport.filter = (log) => log.level === 'error' || log.persist === true;
-katax.logger.addTransport(redisTransport);
-
-// Telegram transport — critical alerts
-const telegramTransport = new TelegramTransport({
-  botToken: katax.envRequired('TELEGRAM_BOT_TOKEN'),
-  chatId: katax.envRequired('TELEGRAM_ALERTS_CHAT_ID'),
-  levels: ['error', 'fatal'],
-  includePersist: true,
-  parseMode: 'Markdown',
-  name: 'telegram-errors',
-});
-katax.logger.addTransport(telegramTransport);
-```
-
-#### WebSocket (Socket.io)
-
-```ts
-// Attached to Express (shared port — preferred)
-const httpServer = createServer(app);
-await katax.socket({
-  name: 'main',
-  httpServer,
-  cors: { origin: '*' },
-});
-
-// Standalone port
-await katax.socket({
-  name: 'events',
-  port: 3001,
-  cors: { origin: 'https://myapp.com' },
-  enableAuth: true,
-});
-
-// Access anywhere
-const ws = katax.ws('main');
-ws.emit('user:update', { userId, data });
-ws.to('room-123').emit('message', payload);
-```
-
-#### Cron Jobs
-
-```ts
-katax.cron({
-  name: 'process-assets',
-  schedule: '*/10 6-15 * * 1-5', // every 10 min, 6am-3pm, Mon-Fri
-  task: processAssets,
-  runOnInit: katax.isProd, // run immediately on startup
-  timezone: 'America/Mexico_City',
-});
-
-// Advanced operations
-katax.cronService.stopAll();
-katax.cronService.startJob('process-assets');
-katax.cronService.removeJob('process-assets');
-katax.cronService.getJobs();
-```
-
-#### Cache (Redis High-Level API)
-
-```ts
-// Requires a redis database named 'cache' to exist
-const cache = katax.cache('cache');
-
-await cache.set('user:123', userData, 3600); // TTL in seconds
-const user = await cache.get<User>('user:123');
-await cache.delete('user:123');
-```
-
-#### Redis Stream Bridge (Logs → WebSocket)
-
-Bridges Redis Stream logs to WebSocket for real-time dashboards:
-
-```ts
-const bridge = katax.bridge('cache', 'main', {
-  appName: 'my-api',
-  streamKey: 'katax:logs',
-  batchSize: 10,
-});
-await bridge.start();
-
-// Stop on shutdown
-const shutdown = async (signal: string) => {
-  bridge?.stop();
-  await katax.shutdown();
-};
-```
-
-#### Managed Heartbeat (v0.5+)
-
-Katax now manages heartbeats automatically — no need to save references:
-
-```ts
-// Auto-cleanup on shutdown
-katax.heartbeat(
-  {
-    app: katax.appName,
-    port: 3000,
-    version: katax.version,
-    intervalMs: 10000,
-  },
-  'cache', // Redis database name
-  'main' // Optional WebSocket name for broadcasting
-);
-
-// No need to save reference or call .stop()
-// katax.shutdown() handles cleanup automatically
-```
-
-#### Registry Helpers (Legacy)
-
-For manual control, you can still use the low-level helpers:
-
-```ts
-import {
-  registerProjectInRedis,
-  registerVersionToRedis,
-  startHeartbeat,
-} from 'katax-service-manager';
-
-const redisDb = katax.db('cache');
-katax.logger.setAppName('my-api');
-
-await registerProjectInRedis(redisDb, {
-  app: katax.appName,
-  version: katax.version,
-  port: PORT,
-  extra: { env: katax.nodeEnv, url: 'https://api.example.com' },
-});
-
-// Manual heartbeat (need to call .stop() yourself)
-const hb = startHeartbeat(
-  redisDb,
-  {
-    app: katax.appName,
-    port: PORT,
-    intervalMs: 10000,
-    version: katax.version,
-  },
-  katax.ws('main')
-);
-
-// Stop on shutdown
-hb?.stop();
-```
-
-#### Health Check Endpoint
-
-```ts
-app.get('/api/health', async (req, res) => {
-  const health = await katax.healthCheck();
-  const status = health.status === 'healthy' ? 200 : health.status === 'degraded' ? 503 : 500;
-  res.status(status).json(health);
-});
-```
-
-#### Testing — Override Services
-
-```ts
-import { Katax } from 'katax-service-manager';
-
-beforeEach(() => {
-  Katax.reset();
-});
-
-katax.overrideService('db:main', mockDb);
-katax.overrideService('logger', mockLogger);
-katax.clearOverride('db:main');
-```
-
----
-
-### 3. katax-cli — Project & Endpoint Generator
-
-CLI tool for scaffolding katax-based APIs and adding routes.
-
-#### Commands
-
-```bash
-# Initialize new API project
-katax init my-api --pm pnpm --ignore-scripts --write-npmrc
-
-# Add endpoint/resource
-katax add endpoint admin/audit/logs
-
-# Generate full resources
-katax generate crud admin/users
-katax generate repository products
-katax generate docs
-
-# Operations
-katax info
-katax deploy status
-katax deploy logs -f
-katax fix docs
-```
-
-When generating, always follow katax-service-manager patterns:
-
-- Use `katax.db('name')` for DB access
-- Use katax-core schemas for validation
-- Follow the bootstrap template for `index.ts`
-
-#### Documentation Guidance for katax-cli
-
-- Document what each command generates, not just the command name.
-- Mention nested-resource support explicitly.
-- Mention safe install flags: `--pm`, `--ignore-scripts`, `--write-npmrc`.
-- Mention repository generation with typed access and SQL/Mongo distinction.
-
----
-
-## Common Gotchas & Rules
-
-### Initialization Order
-
-1. ✅ Use either manual `dotenv.config()` before importing `katax` or `await katax.init({ loadEnv: true })`
-2. ✅ **ALWAYS** call `katax.init()` before using runtime services
-3. ❌ **NEVER** use `katax.db()` or `katax.ws()` before `katax.init()` completes
-
-### Database Operations
-
-- `db.query()` only works for SQL (PostgreSQL/MySQL)
-- MongoDB must use `db.getClient()` for typed operations
-- `db.redis()` uses raw `sendCommand` — prefer `db.getClient()` for typed Redis
-- Redis reconnect is built-in in current Katax versions
-
-### Logger
-
-- ✅ Strings and objects are both valid in current versions
-- ✅ Use objects when you need metadata: `{ message: string, ...meta }`
-- Use `broadcast: true` to emit to WebSocket
-- Use `persist: true` to force Redis transport
-- Use `skipTransport: true` to avoid feedback loops
-
-### Validation
-
-- ✅ Always validate `req.body` with katax-core `.safeParse()`
-- ❌ Never trust raw `req.body` without validation
-- Use `coerce` schemas for query params (strings → numbers/booleans)
-
-### Optional Services
-
-- Set `required: false` on databases to make them optional
-- App continues if optional services fail (analytics, cache, etc.)
-- Always check if service exists before accessing
-
----
-
-## Troubleshooting
-
-### "Cannot access X before initialization"
-
-**Cause**: Accessing service before `katax.init()` completes.
-
-**Fix**: Ensure `await katax.init()` completes before using services.
-
-### Redis connection drops
-
-**Cause**: External client or custom Redis setup outside the managed Katax defaults.
-
-**Fix**: For custom Redis clients, add reconnect strategy manually:
-
-```ts
-socket: {
-  reconnectStrategy: (retries) => Math.min(retries * 100, 3000),
-}
-```
-
-### Environment variables undefined
-
-**Cause**: Env values loaded too late and `loadEnv` was not used.
-
-**Fix**: Move `dotenv.config()` to the top before importing `katax`, or switch to `await katax.init({ loadEnv: true })`.
-
-### Logger throws "message is required"
-
-**Cause**: Passing malformed object log input.
-
-**Fix**: Use valid string or object syntax, for example `logger.info('text')` or `logger.info({ message: 'text' })`.
-
-### Database query fails with TypeScript error
-
-**Cause**: Using `.query()` on MongoDB or wrong DB type.
-
-**Fix**:
-
-- SQL: Use `db.query(sql, params)`
-- MongoDB: Use `db.getClient().db().collection()`
-- Redis: Use `db.getClient()` for typed operations
-
----
-
-## Quick Reference Checklist
-
-When setting up a new Katax project:
-
-- [ ] `dotenv.config()` at top of entry file
-- [ ] Import `katax` after dotenv, or use `loadEnv: true`
-- [ ] Call `await katax.init()` with logger config
-- [ ] Setup databases with `await katax.database()`
-- [ ] Setup WebSocket with `await katax.socket()` if needed
-- [ ] Add cron jobs with `katax.cron()` if needed
-- [ ] Add transports (Redis, Telegram) if needed
-- [ ] Create graceful shutdown handlers (SIGTERM, SIGINT)
-- [ ] Add health check endpoint
-- [ ] Validate all request bodies with katax-core schemas
-
----
-
-## Next Steps
-
-After creating this skill, consider:
-
-1. Creating workspace instructions (`.github/copilot-instructions.md`) to always apply Katax patterns
-2. Adding error handling prompts for common Katax errors
-3. Creating endpoint templates in CLI package
-4. Setting up pre-commit hooks to validate schema usage
