@@ -189,7 +189,7 @@ export interface HealthCheckResult {
 /**
  * Log levels supported by the logger
  */
-export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'success';
 
 export interface LoggerConfig {
   /**
@@ -623,6 +623,7 @@ export interface ILoggerService {
   trace(log: LogMessage): void;
   debug(log: LogMessage): void;
   info(log: LogMessage): void;
+  success(log: LogMessage): void;
   warn(log: LogMessage): void;
   error(log: LogMessage): void;
   fatal(log: LogMessage): void;

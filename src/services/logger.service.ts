@@ -60,6 +60,7 @@ export class LoggerService implements ILoggerService {
             colorize: true,
             translateTime: 'HH:MM:ss',
             ignore: 'pid,hostname',
+            customColors: 'success:blue',
           },
         }
       : config?.destination
@@ -68,13 +69,14 @@ export class LoggerService implements ILoggerService {
 
     this.logger = pino({
       level: config?.level ?? 'info',
+      customLevels: { success: 35 },
       ...(transport && { transport }),
       formatters: {
         level: (label) => {
           return { level: label };
         },
       },
-    });
+    }) as unknown as PinoLogger;
   }
 
   /**
@@ -181,6 +183,19 @@ export class LoggerService implements ILoggerService {
     }
 
     this.deliverToTransports('info', { message, ...metadata });
+  }
+
+  public success(log: LogMessage): void {
+    const normalized = typeof log === 'string' ? { message: log } : log;
+    const { message, broadcast, room, ...metadata } = normalized;
+
+    (this.logger as any).success(metadata, message);
+
+    if (broadcast) {
+      this.broadcast('success', message, true, room, metadata);
+    }
+
+    this.deliverToTransports('success', { message, ...metadata });
   }
 
   public warn(log: LogMessage): void {

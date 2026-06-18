@@ -5,7 +5,7 @@
 
 **Runtime service container for Node.js applications** - Manages shared services like config, logging, database pools, caching, and WebSocket connections with a singleton pattern.
 
-**Version**: 0.5.3 | **Node**: >= 18
+**Version**: 0.5.4 | **Node**: >= 18
 
 ## Features
 
@@ -149,10 +149,13 @@ Pino-based structured logging with WebSocket broadcast and pluggable transports.
 katax.logger.trace({ message: 'Entering function' });
 katax.logger.debug({ message: 'Processing item' });
 katax.logger.info({ message: 'Server started' });
+katax.logger.success({ message: 'User registered' });
 katax.logger.warn({ message: 'High memory usage' });
 katax.logger.error({ message: 'Connection failed', error: err });
 katax.logger.fatal({ message: 'Unrecoverable error' });
 ```
+
+> **Note:** `success` is a custom log level (between `info` and `warn`) that displays in **blue** with pino-pretty when `prettyPrint` is enabled.
 
 ### Structured Log Objects
 
