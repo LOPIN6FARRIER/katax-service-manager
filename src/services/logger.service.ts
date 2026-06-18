@@ -60,6 +60,7 @@ export class LoggerService implements ILoggerService {
             colorize: true,
             translateTime: 'HH:MM:ss',
             ignore: 'pid,hostname',
+            customLevels: 'success:35',
             customColors: 'success:blue',
           },
         }
