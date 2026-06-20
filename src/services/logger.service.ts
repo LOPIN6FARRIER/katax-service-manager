@@ -3,27 +3,49 @@ import type {
   ILoggerService,
   IWebSocketService,
   LoggerConfig,
+  LogConfig,
   LogLevel,
   LogMessage,
   LogTransport,
 } from '../types.js';
 
 /**
- * Logger service implementation using Pino
- * Supports structured logging with optional WebSocket broadcasting
- *
- * Simple and consistent API using objects
- *
- * @example
- * // Local only
- * logger.info({ message: 'Processing request' });
- *
- * // Local + broadcast to all
- * logger.info({ message: 'User created', broadcast: true, userId: 123 });
- *
- * // Local + broadcast to specific room
- * logger.info({ message: 'Production event', broadcast: true, room: 'production', errorCode: 500 });
+ * Normalize a LogMessage into an object, extract the message,
+ * and split data from control properties.
  */
+function splitLog(
+  log: LogMessage,
+  config?: LogConfig
+): {
+  message: string;
+  mergedConfig: LogConfig;
+  data: Record<string, unknown>;
+} {
+  const obj = typeof log === 'string' ? { message: log } : { ...log };
+
+  const {
+    message = '',
+    broadcast,
+    room,
+    persist,
+    skipTransport,
+    skipTelegram,
+    skipRedis,
+    ...data
+  } = obj;
+
+  const mergedConfig = {
+    broadcast: broadcast ?? config?.broadcast,
+    room: room ?? config?.room,
+    persist: persist ?? config?.persist,
+    skipTransport: skipTransport ?? config?.skipTransport,
+    skipTelegram: skipTelegram ?? config?.skipTelegram,
+    skipRedis: skipRedis ?? config?.skipRedis,
+  } as LogConfig;
+
+  return { message, mergedConfig, data };
+}
+
 export class LoggerService implements ILoggerService {
   private readonly logger: PinoLogger;
   private readonly broadcastEnabled: boolean;
@@ -31,13 +53,6 @@ export class LoggerService implements ILoggerService {
   private transports: LogTransport[] = [];
   private appName?: string;
 
-  /**
-   * Create a LoggerService instance
-   * @param config - Logger configuration (optional)
-   * @param existingLogger - Internal: existing Pino logger for child creation
-   * @param inheritBroadcast - Internal: inherit broadcast setting from parent
-   * @param inheritSocket - Internal: inherit socket service from parent
-   */
   constructor(
     config?: LoggerConfig,
     existingLogger?: PinoLogger,
@@ -81,10 +96,6 @@ export class LoggerService implements ILoggerService {
     }) as unknown as PinoLogger;
   }
 
-  /**
-   * Set the WebSocket service for broadcasting logs
-   * Called internally by Katax during initialization
-   */
   public setSocketService(socketService: IWebSocketService): void {
     this.socketService = socketService;
   }
@@ -114,14 +125,6 @@ export class LoggerService implements ILoggerService {
     this.appName = name;
   }
 
-  /**
-   * Broadcast log to WebSocket if enabled
-   * @param level - Log level
-   * @param message - Log message
-   * @param shouldBroadcast - Whether to broadcast this log
-   * @param room - Optional room to send to
-   * @param metadata - Optional additional metadata
-   */
   private broadcast(
     level: string,
     message: string,
@@ -148,124 +151,109 @@ export class LoggerService implements ILoggerService {
     }
   }
 
-  public trace(log: LogMessage): void {
-    const normalized = typeof log === 'string' ? { message: log } : log;
-    const { message, broadcast, room, ...metadata } = normalized;
+  public trace(log: LogMessage, config?: LogConfig): void {
+    const { message, mergedConfig, data } = splitLog(log, config);
+    this.logger.trace(data, message);
 
-    this.logger.trace(metadata, message);
-
-    if (broadcast) {
-      this.broadcast('trace', message, true, room, metadata);
+    if (mergedConfig.broadcast) {
+      this.broadcast('trace', message, true, mergedConfig.room, data);
     }
 
-    this.deliverToTransports('trace', { message, ...metadata });
+    this.deliverToTransports('trace', { message, ...data }, mergedConfig);
   }
 
-  public debug(log: LogMessage): void {
-    const normalized = typeof log === 'string' ? { message: log } : log;
-    const { message, broadcast, room, ...metadata } = normalized;
+  public debug(log: LogMessage, config?: LogConfig): void {
+    const { message, mergedConfig, data } = splitLog(log, config);
+    this.logger.debug(data, message);
 
-    this.logger.debug(metadata, message);
-
-    if (broadcast) {
-      this.broadcast('debug', message, true, room, metadata);
+    if (mergedConfig.broadcast) {
+      this.broadcast('debug', message, true, mergedConfig.room, data);
     }
 
-    this.deliverToTransports('debug', { message, ...metadata });
+    this.deliverToTransports('debug', { message, ...data }, mergedConfig);
   }
 
-  public info(log: LogMessage): void {
-    const normalized = typeof log === 'string' ? { message: log } : log;
-    const { message, broadcast, room, ...metadata } = normalized;
+  public info(log: LogMessage, config?: LogConfig): void {
+    const { message, mergedConfig, data } = splitLog(log, config);
+    this.logger.info(data, message);
 
-    this.logger.info(metadata, message);
-
-    if (broadcast) {
-      this.broadcast('info', message, true, room, metadata);
+    if (mergedConfig.broadcast) {
+      this.broadcast('info', message, true, mergedConfig.room, data);
     }
 
-    this.deliverToTransports('info', { message, ...metadata });
+    this.deliverToTransports('info', { message, ...data }, mergedConfig);
   }
 
-  public success(log: LogMessage): void {
-    const normalized = typeof log === 'string' ? { message: log } : log;
-    const { message, broadcast, room, ...metadata } = normalized;
+  public success(log: LogMessage, config?: LogConfig): void {
+    const { message, mergedConfig, data } = splitLog(log, config);
+    (this.logger as any).success(data, message);
 
-    (this.logger as any).success(metadata, message);
-
-    if (broadcast) {
-      this.broadcast('success', message, true, room, metadata);
+    if (mergedConfig.broadcast) {
+      this.broadcast('success', message, true, mergedConfig.room, data);
     }
 
-    this.deliverToTransports('success', { message, ...metadata });
+    this.deliverToTransports('success', { message, ...data }, mergedConfig);
   }
 
-  public warn(log: LogMessage): void {
-    const normalized = typeof log === 'string' ? { message: log } : log;
-    const { message, broadcast, room, ...metadata } = normalized;
+  public warn(log: LogMessage, config?: LogConfig): void {
+    const { message, mergedConfig, data } = splitLog(log, config);
+    this.logger.warn(data, message);
 
-    this.logger.warn(metadata, message);
-
-    if (broadcast) {
-      this.broadcast('warn', message, true, room, metadata);
+    if (mergedConfig.broadcast) {
+      this.broadcast('warn', message, true, mergedConfig.room, data);
     }
 
-    this.deliverToTransports('warn', { message, ...metadata });
+    this.deliverToTransports('warn', { message, ...data }, mergedConfig);
   }
 
-  public error(log: LogMessage): void {
-    const normalized = typeof log === 'string' ? { message: log } : log;
-    const { message, broadcast, room, ...metadata } = normalized;
+  public error(log: LogMessage, config?: LogConfig): void {
+    const { message, mergedConfig, data } = splitLog(log, config);
+    this.logger.error(data, message);
 
-    this.logger.error(metadata, message);
-
-    if (broadcast) {
-      this.broadcast('error', message, true, room, metadata);
+    if (mergedConfig.broadcast) {
+      this.broadcast('error', message, true, mergedConfig.room, data);
     }
 
-    this.deliverToTransports('error', { message, ...metadata });
+    this.deliverToTransports('error', { message, ...data }, mergedConfig);
   }
 
-  public fatal(log: LogMessage): void {
-    const normalized = typeof log === 'string' ? { message: log } : log;
-    const { message, broadcast, room, ...metadata } = normalized;
+  public fatal(log: LogMessage, config?: LogConfig): void {
+    const { message, mergedConfig, data } = splitLog(log, config);
+    this.logger.fatal(data, message);
 
-    this.logger.fatal(metadata, message);
-
-    if (broadcast) {
-      this.broadcast('fatal', message, true, room, metadata);
+    if (mergedConfig.broadcast) {
+      this.broadcast('fatal', message, true, mergedConfig.room, data);
     }
 
-    this.deliverToTransports('fatal', { message, ...metadata });
+    this.deliverToTransports('fatal', { message, ...data }, mergedConfig);
   }
 
   /**
    * Deliver a log object to configured transports asynchronously.
-   * Respects transport.filter and per-log override `persist` when present.
+   * `data` is guaranteed to be free of control keys.
+   * `config` supplies `persist` / `skip*` for routing only.
    */
-  private deliverToTransports(level: LogLevel, log: Record<string, unknown>): void {
+  private deliverToTransports(
+    level: LogLevel,
+    data: Record<string, unknown>,
+    config: LogConfig = {}
+  ): void {
     const enriched = {
-      ...log,
+      ...data,
       level,
       timestamp: Date.now(),
       ...(this.appName && { appName: this.appName }),
-    } as any;
+    };
 
-    const persistOverride = Object.prototype.hasOwnProperty.call(enriched, 'persist')
-      ? (enriched as any).persist
-      : undefined;
+    const { persist } = config;
 
     for (const t of this.transports) {
       try {
-        if (persistOverride === false) {
-          continue;
-        }
+        if (persist === false) continue;
 
-        if (t.filter && !t.filter(enriched) && persistOverride !== true) {
-          continue;
-        }
+        if (t.filter && !t.filter(enriched as any) && persist !== true) continue;
 
-        void t.send(enriched).catch((err) => {
+        void t.send(enriched as any).catch((err) => {
           try {
             this.logger.warn({ err }, `Transport ${t.name ?? '<anon>'} failed to send log`);
           } catch {}
@@ -283,10 +271,6 @@ export class LoggerService implements ILoggerService {
     return new LoggerService(undefined, childPinoLogger, this.broadcastEnabled, this.socketService);
   }
 
-  /**
-   * Get the underlying Pino logger instance
-   * Useful for advanced use cases
-   */
   public getPinoLogger(): PinoLogger {
     return this.logger;
   }

@@ -34,7 +34,7 @@ describe('LoggerService', () => {
     );
   });
 
-  it('delivers logs to transports and respects filters', async () => {
+  it('delivers logs to transports with persist:true despite filter', async () => {
     const send = vi.fn(async () => undefined);
     const logger = new LoggerService();
 
@@ -53,8 +53,31 @@ describe('LoggerService', () => {
       expect.objectContaining({
         message: 'Persist me',
         level: 'error',
-        persist: true,
       })
     );
+    expect(send.mock.calls[0][0]).not.toHaveProperty('persist');
+  });
+
+  it('delivers logs with config param and strips persist from data', async () => {
+    const send = vi.fn(async () => undefined);
+    const logger = new LoggerService();
+
+    logger.addTransport({ name: 'test', send });
+
+    logger.info({ message: 'Pago procesado', amount: 100 }, { persist: true });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Pago procesado',
+        amount: 100,
+        level: 'info',
+      })
+    );
+    expect(send.mock.calls[0][0]).not.toHaveProperty('persist');
+    expect(send.mock.calls[0][0]).not.toHaveProperty('broadcast');
+    expect(send.mock.calls[0][0]).not.toHaveProperty('room');
   });
 });

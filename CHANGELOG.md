@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.8] - 2026-06-20
+
+### ✨ Added
+
+#### LogConfig — Separate routing config from data
+- New `LogConfig` type (`persist`, `broadcast`, `room`, `skipTransport`, `skipTelegram`, `skipRedis`)
+- All logger methods now accept an optional second parameter: `logger.info('msg', { persist: true })`
+- Control properties are **never** passed to transports — they are used only for routing
+- `persist`, `broadcast`, `room`, `skip*` no longer appear in Redis Stream `meta` field
+- Legacy flat-object style (`{ message: 'x', persist: true }`) still works (props extracted automatically)
+
+```typescript
+// New recommended style
+logger.info('Payment processed', { persist: true })
+logger.info({ message: 'Payment', amount: 100 }, { broadcast: true, room: 'ops' })
+
+// Legacy still works
+logger.info({ message: 'Payment', amount: 100, persist: true })
+```
+
+### 🧹 Updated
+- `RedisTransport.defaultFormat` strips control keys as safety net
+- `LogMessageObject` control properties marked `@deprecated` (use `LogConfig` instead)
+- `LogConfig` type exported from package
+
 ## [0.5.0] - 2026-04-01
 
 ### ✨ Added

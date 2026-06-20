@@ -23,6 +23,7 @@ export type {
   RegistryUnregisterPayload,
   ServiceInfo,
   LoggerConfig,
+  LogConfig,
   LogLevel,
   LogMessage,
   LogMessageObject,

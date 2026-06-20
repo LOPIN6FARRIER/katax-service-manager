@@ -426,131 +426,66 @@ export interface IConfigService {
  * Extended log message with standard optional properties
  */
 export interface LogMessageObject {
-  /**
-   * The log message (required)
-   */
+  /** The log message (required) */
   message: string;
 
-  /**
-   * Whether to broadcast this log to WebSocket clients
-   * @default false
-   */
+  /** @deprecated Use the second `config` parameter instead. Will be removed in v1.0. */
   broadcast?: boolean;
-
-  /**
-   * Optional room to send the log to (requires broadcast: true)
-   * @example 'production', 'staging', 'my-app-name'
-   */
+  /** @deprecated Use the second `config` parameter instead. Will be removed in v1.0. */
   room?: string;
-
-  /**
-   * Persist this log (save to Redis/Database even if not an error)
-   * Useful for important info logs that should be stored
-   * @default false
-   */
+  /** @deprecated Use the second `config` parameter instead. Will be removed in v1.0. */
   persist?: boolean;
-
-  /**
-   * Skip ALL transports (Redis, Telegram, File, etc.)
-   * Useful for internal/debug logs that shouldn't be persisted or sent
-   * @default false
-   */
+  /** @deprecated Use the second `config` parameter instead. Will be removed in v1.0. */
   skipTransport?: boolean;
-
-  /**
-   * Skip only Telegram transport (but allow Redis and others)
-   * Useful for filtering spam/minor errors from Telegram notifications
-   * @default false
-   */
+  /** @deprecated Use the second `config` parameter instead. Will be removed in v1.0. */
   skipTelegram?: boolean;
-
-  /**
-   * Skip only Redis transport (but allow Telegram and others)
-   * Useful for logs that should alert but not be stored long-term
-   * @default false
-   */
+  /** @deprecated Use the second `config` parameter instead. Will be removed in v1.0. */
   skipRedis?: boolean;
 
-  /**
-   * Log level (added automatically by logger)
-   * @internal
-   */
+  /** @internal */
   level?: LogLevel;
-
-  /**
-   * Unix timestamp in milliseconds (added automatically by logger)
-   * @internal
-   */
+  /** @internal */
   timestamp?: number;
-
-  /**
-   * Application name (set via katax.logger.setAppName())
-   * Added automatically to all logs for multi-service environments
-   * @internal
-   */
+  /** @internal */
   appName?: string;
 
-  /**
-   * Error message, Error object, or any error-related data
-   * @example 'Connection timeout', new Error('Failed'), { code: 'ECONNREFUSED' }
-   */
   error?: string | Error | unknown;
-
-  /**
-   * Stack trace for debugging
-   * Usually extracted from Error objects automatically
-   */
   stack?: string;
-
-  /**
-   * Error code for categorization
-   * @example 'ECONNREFUSED', 'AUTH_FAILED', 404
-   */
   code?: string | number;
-
-  /**
-   * User ID associated with this log
-   * Useful for tracking user-specific actions or errors
-   */
   userId?: string | number;
-
-  /**
-   * Request ID for distributed tracing
-   * Helps correlate logs across multiple services
-   */
   requestId?: string;
-
-  /**
-   * Duration in milliseconds (for performance logs)
-   * @example Log API response time, database query duration, etc.
-   */
   duration?: number;
-
-  /**
-   * HTTP status code (for API logs)
-   */
   statusCode?: number;
-
-  /**
-   * HTTP method (for API logs)
-   */
   method?: string;
-
-  /**
-   * URL or endpoint path (for API logs)
-   */
   path?: string;
-
-  /**
-   * IP address of client/user
-   */
   ip?: string;
 
-  /**
-   * Any additional custom properties
-   * The logger is flexible and accepts any key-value pairs
-   */
+  /** Any additional custom properties */
   [key: string]: unknown;
+}
+
+/**
+ * Log routing configuration — controls how the log is dispatched.
+ * These properties are NEVER passed to transports (Pino, Redis, Telegram, etc.),
+ * they are used only for routing decisions.
+ *
+ * @example
+ * logger.info('Server started', { persist: true })
+ * logger.info({ message: 'Payment', amount: 100 }, { broadcast: true, room: 'ops' })
+ */
+export interface LogConfig {
+  /** Broadcast this log to WebSocket clients */
+  broadcast?: boolean;
+  /** Optional room for WebSocket broadcast */
+  room?: string;
+  /** Force-persist this log (bypass transport filters) */
+  persist?: boolean;
+  /** Skip ALL transports */
+  skipTransport?: boolean;
+  /** Skip only Telegram transport */
+  skipTelegram?: boolean;
+  /** Skip only Redis transport */
+  skipRedis?: boolean;
 }
 
 /**
@@ -610,23 +545,29 @@ export interface LogTransport {
  * Simple and consistent API using objects
  *
  * @example
- * // Local only
- * logger.info({ message: 'Server started' });
+ * // Simple message
+ * logger.info('Server started');
  *
- * // Local + broadcast to dashboard
- * logger.info({ message: 'User login', broadcast: true, userId: 123 });
+ * // With data and config (recommended)
+ * logger.info({ message: 'User login', userId: 123 }, { broadcast: true });
  *
  * // Broadcast to specific room
- * logger.info({ message: 'Production event', broadcast: true, room: 'production' });
+ * logger.info('Production event', { broadcast: true, room: 'production' });
+ *
+ * // Pino-compatible style (data + message)
+ * logger.info({ userId: 123 }, 'User logged in', { persist: true });
+ *
+ * // Legacy style (still works, but config param is preferred)
+ * logger.info({ message: 'User login', broadcast: true, userId: 123 });
  */
 export interface ILoggerService {
-  trace(log: LogMessage): void;
-  debug(log: LogMessage): void;
-  info(log: LogMessage): void;
-  success(log: LogMessage): void;
-  warn(log: LogMessage): void;
-  error(log: LogMessage): void;
-  fatal(log: LogMessage): void;
+  trace(log: LogMessage, config?: LogConfig): void;
+  debug(log: LogMessage, config?: LogConfig): void;
+  info(log: LogMessage, config?: LogConfig): void;
+  success(log: LogMessage, config?: LogConfig): void;
+  warn(log: LogMessage, config?: LogConfig): void;
+  error(log: LogMessage, config?: LogConfig): void;
+  fatal(log: LogMessage, config?: LogConfig): void;
 
   /**
    * Create a child logger with additional context

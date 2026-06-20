@@ -113,7 +113,7 @@ export class RedisTransport implements LogTransport {
    * Used when no custom format is provided
    */
   private defaultFormat(log: LogEntry): Record<string, string> {
-    const { message, broadcast, room, level, timestamp, appName, ...metadata } = log;
+    const { message, broadcast, room, persist, skipTransport, skipTelegram, skipRedis, level, timestamp, appName, ...metadata } = log;
 
     const fields: Record<string, string> = {
       level: level ?? 'info',
