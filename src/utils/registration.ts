@@ -79,6 +79,13 @@ export function startHeartbeat(
     intervalMs?: number;
     ttlSeconds?: number;
     version?: string;
+    /**
+     * Called when a heartbeat tick fails to write to Redis or broadcast over
+     * the socket. Without this, failures were previously swallowed completely
+     * (no logger is available in this free function), making a dead heartbeat
+     * indistinguishable from a healthy one until someone notices stale data.
+     */
+    onError?: (error: unknown, stage: 'redis' | 'socket') => void;
   },
   socket?: IWebSocketService
 ): {
@@ -90,6 +97,7 @@ export function startHeartbeat(
   const port = opts.port !== undefined ? String(opts.port) : undefined;
   const ttl = opts.ttlSeconds ?? 60;
   const interval = opts.intervalMs ?? Math.max(1000, (ttl - 10) * 1000);
+  const onError = opts.onError;
 
   const key = `katax:service:${app}:${pid}`;
 
@@ -111,9 +119,13 @@ export function startHeartbeat(
       if (socket) {
         try {
           socket.emit('heartbeat', payload, app);
-        } catch {}
+        } catch (error) {
+          onError?.(error, 'socket');
+        }
       }
-    } catch {}
+    } catch (error) {
+      onError?.(error, 'redis');
+    }
   }
 
   void send();
