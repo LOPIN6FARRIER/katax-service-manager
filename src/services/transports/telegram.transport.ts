@@ -198,8 +198,9 @@ export class TelegramTransport implements LogTransport {
         const error = await response.text();
         console.error(`[TelegramTransport] Error sending message: ${error}`);
       }
-    } catch (error: any) {
-      console.error(`[TelegramTransport] Failed to send: ${error.message}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[TelegramTransport] Failed to send: ${message}`);
     }
   }
 

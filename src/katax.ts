@@ -77,6 +77,9 @@ export class Katax {
   private _hooks: KataxLifecycleHooks | null = null;
   private _shutdownHooks: Array<() => Promise<void> | void> = [];
   private _processHandlersRegistered = false;
+  private _sigtermHandler: (() => void) | null = null;
+  private _sigintHandler: (() => void) | null = null;
+  private _initPromise: Promise<Katax> | null = null;
   private readonly _bootstrapService = new BootstrapService();
   private readonly _healthService = new HealthService();
   private readonly _lifecycleService = new LifecycleService();
@@ -108,7 +111,15 @@ export class Katax {
       const pkg = JSON.parse(content) as { name?: string; version?: string };
       this._appName = pkg.name ?? 'unknown';
       this._appVersion = pkg.version ?? '0.0.0';
-    } catch {}
+    } catch (error) {
+      // this.logger works pre-init (lazily constructs a plain console logger),
+      // so a malformed/unreadable package.json is visible instead of silently
+      // leaving appName/version at their defaults.
+      this.logger.warn({
+        message: `Failed to read/parse package.json at '${packagePath}', using default appName/version`,
+        err: error,
+      });
+    }
   }
 
   /**
@@ -153,6 +164,24 @@ export class Katax {
       return this;
     }
 
+    // Concurrent init() calls (e.g. two request handlers both lazily initializing
+    // on first use) must share a single in-flight bootstrap rather than each
+    // running BootstrapService.initialize()/registerProcessHandlers() independently.
+    if (this._initPromise) {
+      return this._initPromise;
+    }
+
+    this._initPromise = this.doInit(config).catch((error) => {
+      // A failed init() should be retryable - don't leave callers stuck forever
+      // awaiting a rejected promise from a call they didn't make.
+      this._initPromise = null;
+      throw error;
+    });
+
+    return this._initPromise;
+  }
+
+  private async doInit(config?: KataxInitConfig): Promise<Katax> {
     if (config?.loadEnv) {
       try {
         // @ts-expect-error - dotenv is an optional peer dependency
@@ -759,7 +788,19 @@ export class Katax {
       });
     }
 
-    const hb = startHeartbeat((redis as DatabaseService).asRedis(), opts, socket);
+    const hb = startHeartbeat(
+      (redis as DatabaseService).asRedis(),
+      {
+        ...opts,
+        onError: (error, stage) => {
+          this._logger?.warn({
+            message: `Heartbeat ${stage === 'redis' ? 'write to Redis' : 'broadcast over socket'} failed`,
+            err: error,
+          });
+        },
+      },
+      socket
+    );
     this._heartbeats.push(hb);
     return hb;
   }
@@ -928,11 +969,31 @@ export class Katax {
       process.exit(0);
     };
 
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT', () => shutdown('SIGINT'));
+    this._sigtermHandler = () => shutdown('SIGTERM');
+    this._sigintHandler = () => shutdown('SIGINT');
+    process.on('SIGTERM', this._sigtermHandler);
+    process.on('SIGINT', this._sigintHandler);
 
     this._processHandlersRegistered = true;
     this._logger?.debug({ message: 'Process signal handlers registered (SIGTERM, SIGINT)' });
+  }
+
+  /**
+   * Remove the SIGTERM/SIGINT handlers registered by registerProcessHandlers().
+   * Without this, every reset() + init() cycle (common in tests) leaves the old
+   * instance's listeners attached to `process` forever, accumulating toward
+   * Node's MaxListenersExceededWarning.
+   */
+  private removeProcessHandlers(): void {
+    if (this._sigtermHandler) {
+      process.off('SIGTERM', this._sigtermHandler);
+      this._sigtermHandler = null;
+    }
+    if (this._sigintHandler) {
+      process.off('SIGINT', this._sigintHandler);
+      this._sigintHandler = null;
+    }
+    this._processHandlersRegistered = false;
   }
 
   /**
@@ -986,15 +1047,23 @@ export class Katax {
     this._heartbeats = [];
 
     this._initialized = false;
+    this._initPromise = null;
+    this.removeProcessHandlers();
   }
 
   /**
    * Reset the singleton instance (mainly for testing)
    * Also clears initialization state
+   *
+   * Awaits shutdown() first so open database/socket connections are actually
+   * closed instead of being dropped from tracking while still connected, and
+   * removes this instance's SIGTERM/SIGINT listeners so repeated reset()+init()
+   * cycles (e.g. across test files) don't accumulate listeners on `process`.
    */
-  public static reset(): void {
+  public static async reset(): Promise<void> {
     if (Katax.instance) {
-      Katax.instance._initialized = false;
+      await Katax.instance.shutdown();
+      Katax.instance.removeProcessHandlers();
       Katax.instance._config = null;
       Katax.instance._logger = null;
       Katax.instance._cronService = null;

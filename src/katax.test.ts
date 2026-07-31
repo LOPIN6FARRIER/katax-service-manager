@@ -6,13 +6,13 @@ import { KataxConfigError, KataxDatabaseError } from './errors.js';
 describe('Katax lifecycle hooks', () => {
   const originalNodeEnv = process.env['NODE_ENV'];
 
-  beforeEach(() => {
-    Katax.reset();
+  beforeEach(async () => {
+    await Katax.reset();
     process.env['NODE_ENV'] = 'test';
   });
 
-  afterEach(() => {
-    Katax.reset();
+  afterEach(async () => {
+    await Katax.reset();
     process.env['NODE_ENV'] = originalNodeEnv;
   });
 
