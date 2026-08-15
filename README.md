@@ -5,7 +5,7 @@
 
 **Runtime service container for Node.js applications** - Manages shared services like config, logging, database pools, caching, and WebSocket connections with a singleton pattern.
 
-**Version**: 0.5.4 | **Node**: >= 18
+**Version**: 0.5.9 | **Node**: >= 18
 
 ## Features
 
@@ -587,7 +587,7 @@ await registerProjectInRedis(redisDb, { app: 'myapp', version: '1.0' });
 
 ```typescript
 interface DatabaseConfig {
-  name: string;
+  name?: string;  // required at runtime by katax.database(), optional in the type
   type: 'postgresql' | 'mysql' | 'mongodb' | 'redis';
   required?: boolean;    // default true (false returns null on failure)
   connection: string | PostgreSQLConnectionOptions | MySQLConnectionOptions | MongoDBConnectionOptions | RedisConnectionOptions;
@@ -599,7 +599,7 @@ interface DatabaseConfig {
 
 ```typescript
 interface WebSocketConfig {
-  name: string;
+  name?: string;  // required at runtime by katax.socket(), optional in the type
   port?: number;
   httpServer?: HttpServer;
   cors?: { origin: string | string[]; credentials?: boolean };

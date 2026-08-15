@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.9] - 2026-08-06
+
+Current published version. No functional changes tracked in this file since 0.5.8 beyond the version bump — see README.md for the current API surface (`DatabaseConfig.type` includes `'mongodb'`, `db.asMongo()`).
+
 ## [0.5.8] - 2026-06-20
 
 ### ✨ Added
