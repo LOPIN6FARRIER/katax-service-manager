@@ -98,8 +98,10 @@
     "@typescript-eslint/parser": "^8.20.0",
     "@vitest/coverage-v8": "^2.1.8",
     "eslint": "^9.18.0",
+    "node-cron": "^4.6.0",
     "prettier": "^3.4.2",
     "rimraf": "^6.0.1",
+    "socket.io": "^4.8.3",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
