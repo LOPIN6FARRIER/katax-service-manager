@@ -2,6 +2,56 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-09-10
+
+### 🐛 Fixed — node-cron and socket.io were never actually optional
+
+`node-cron` and `socket.io` are declared as optional peer dependencies, but
+were statically imported at module scope (`index.ts` re-exported
+`CronService`/`WebSocketService` eagerly, and `bootstrap.service.ts`
+constructed a `CronService` on every `katax.init()` regardless of use).
+ESM static imports resolve at module-graph-link time, so simply doing
+`import { katax } from 'katax-service-manager'` required both packages to
+be installed — even for apps that never call `katax.cron()` or
+`katax.socket()`. Under npm's looser resolution this sometimes went
+unnoticed; under pnpm's strict `node_modules` it crashed at boot with
+`ERR_MODULE_NOT_FOUND`.
+
+Both are now loaded lazily via dynamic `import()`, on first actual use:
+- `katax.socket()` loads `WebSocketService` (and therefore `socket.io`)
+  inside `createSocket()`, which was already async and always awaited by
+  callers — no observable behavior change.
+- `katax.cron()` loads `CronService` (and therefore `node-cron`) on first
+  call via a new lazy singleton (`ensureCronService()`). `CronService` is
+  no longer constructed during `bootstrap.service.ts`'s `initialize()`.
+
+### ⚠️ Breaking (semver-minor, pre-1.0)
+
+- `Katax.cron()`, `ICronService.addJob()`, and `ICronService.startJob()`
+  now return `Promise<void>` instead of `void`. Existing fire-and-forget
+  call sites (`katax.cron({...})` without `await`) keep working — the job
+  still gets registered, just after the dynamic import resolves (a single
+  microtask on a cold start; instant afterwards, since the module is
+  cached). Await the call if you want registration errors (invalid
+  schedule, missing `node-cron`) to surface at the call site instead of as
+  an unhandled rejection.
+- `index.ts` no longer re-exports the `WebSocketService`/`CronService`
+  classes directly — both statically import their respective optional
+  peer dependency, so re-exporting them from the entrypoint would force
+  every consumer to install both again, defeating the whole fix. Use
+  `katax.socket()` / `katax.cron()` on the singleton instead (this was
+  already the only supported pattern in practice).
+- `katax.cronService` (advanced-ops getter: `stopAll`, `getJobs`,
+  `startJob`, `stopJob`, `removeJob`) now throws `KataxConfigError` if
+  accessed before the first `await katax.cron(...)` call, since the
+  service is no longer created eagerly during `init()`.
+- `katax.healthCheck()` and `katax.shutdown()` no longer touch cron at all
+  if it was never used — previously `shutdown()` always called
+  `cronService.stopAll()` (harmless no-op) and `healthCheck()` always
+  called `cronService.getJobs()`; both still report `cron: true` /
+  `'healthy'` when cron was never engaged, instead of needlessly
+  instantiating it just to probe it.
+
 ## [0.5.9] - 2026-08-06
 
 Current published version. No functional changes tracked in this file since 0.5.8 beyond the version bump — see README.md for the current API surface (`DatabaseConfig.type` includes `'mongodb'`, `db.asMongo()`).

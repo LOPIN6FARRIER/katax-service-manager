@@ -1,15 +1,31 @@
-import cron, { type ScheduledTask } from 'node-cron';
 import pino from 'pino';
 import type { ICronService, CronJobConfig } from '../types.js';
+import type NodeCron from 'node-cron';
 
 const logger = pino({ name: 'katax:cron' });
+
+/**
+ * node-cron is an optional peer dependency — only apps that actually call
+ * katax.cron() need it installed. Loading it eagerly at module scope would
+ * force every katax-service-manager consumer to install it, defeating the
+ * point of marking it optional in package.json. It's loaded once, lazily,
+ * on the first job add/start and cached for the lifetime of the process.
+ */
+type CronModule = typeof NodeCron;
+let cronModulePromise: Promise<CronModule> | null = null;
+function loadCronModule(): Promise<CronModule> {
+  if (!cronModulePromise) {
+    cronModulePromise = import('node-cron').then((mod) => (mod as { default?: CronModule }).default ?? mod);
+  }
+  return cronModulePromise;
+}
 
 /**
  * Job state information
  */
 interface JobState {
   config: CronJobConfig;
-  task: ScheduledTask | null;
+  task: ReturnType<CronModule['schedule']> | null;
   running: boolean;
 }
 
@@ -77,7 +93,7 @@ export class CronService implements ICronService {
       const isEnabled = this.isJobEnabled(jobState.config);
 
       if (isEnabled) {
-        this.startJobInternal(name, jobState);
+        await this.startJobInternal(name, jobState);
       }
     }
 
@@ -96,10 +112,12 @@ export class CronService implements ICronService {
    * Add a new cron job
    * If the service is already initialized, the job will start immediately if enabled
    */
-  public addJob(job: CronJobConfig): void {
+  public async addJob(job: CronJobConfig): Promise<void> {
     if (this.jobs.has(job.name)) {
       throw new Error(`Cron job "${job.name}" already exists`);
     }
+
+    const cron = await loadCronModule();
 
     if (!cron.validate(job.schedule)) {
       throw new Error(`Invalid cron expression "${job.schedule}" for job "${job.name}"`);
@@ -114,7 +132,7 @@ export class CronService implements ICronService {
     this.jobs.set(job.name, jobState);
 
     if (this.initialized && this.isJobEnabled(job)) {
-      this.startJobInternal(job.name, jobState);
+      await this.startJobInternal(job.name, jobState);
 
       if (job.runOnInit === true) {
         void this.runOnInitJob(job.name, jobState);
@@ -143,7 +161,7 @@ export class CronService implements ICronService {
    * Start a specific job
    * Only works if the job is enabled
    */
-  public startJob(name: string): void {
+  public async startJob(name: string): Promise<void> {
     const jobState = this.jobs.get(name);
     if (!jobState) {
       throw new Error(`Cron job "${name}" not found`);
@@ -159,7 +177,7 @@ export class CronService implements ICronService {
       return;
     }
 
-    this.startJobInternal(name, jobState);
+    await this.startJobInternal(name, jobState);
   }
 
   /**
@@ -228,8 +246,9 @@ export class CronService implements ICronService {
   /**
    * Internal method to start a job
    */
-  private startJobInternal(name: string, jobState: JobState): void {
+  private async startJobInternal(name: string, jobState: JobState): Promise<void> {
     const { config } = jobState;
+    const cron = await loadCronModule();
 
     const task = cron.schedule(
       config.schedule,

@@ -1,12 +1,10 @@
 import { ConfigService } from './config.service.js';
 import { LoggerService } from './logger.service.js';
-import { CronService } from './cron.service.js';
-import type { IConfigService, ILoggerService, ICronService, KataxInitConfig } from '../types.js';
+import type { IConfigService, ILoggerService, KataxInitConfig } from '../types.js';
 
 export interface BootstrapResult {
   config: IConfigService;
   logger: ILoggerService;
-  cronService: ICronService;
   resolvedAppName: string;
 }
 
@@ -41,13 +39,9 @@ export class BootstrapService {
 
     logger.setAppName(resolvedAppName);
 
-    const cronService = new CronService();
-    await cronService.init();
-
     return {
       config,
       logger,
-      cronService,
       resolvedAppName,
     };
   }

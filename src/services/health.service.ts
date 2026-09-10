@@ -9,7 +9,7 @@ export class HealthService {
   public async check(
     databases: Map<string, IDatabaseService>,
     sockets: Map<string, IWebSocketService>,
-    cronService: ICronService
+    cronService: ICronService | null
   ): Promise<HealthCheckResult> {
     const result: HealthCheckResult = {
       status: 'healthy',
@@ -50,12 +50,17 @@ export class HealthService {
       }
     }
 
-    try {
-      cronService.getJobs();
-      result.services.cron = true;
-    } catch {
-      result.services.cron = false;
-      result.status = 'degraded';
+    // Cron is only wired up lazily on the first katax.cron() call - an app
+    // that never uses it hasn't degraded anything, so leave cron healthy
+    // and skip the check rather than instantiating it just to probe it.
+    if (cronService) {
+      try {
+        cronService.getJobs();
+        result.services.cron = true;
+      } catch {
+        result.services.cron = false;
+        result.status = 'degraded';
+      }
     }
 
     const allDbsHealthy = Object.values(result.services.databases).every((v) => v);

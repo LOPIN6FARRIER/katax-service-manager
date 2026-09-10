@@ -50,8 +50,13 @@ export type {
 export { ConfigService } from './services/config.service.js';
 export { LoggerService } from './services/logger.service.js';
 export { DatabaseService } from './services/database.service.js';
-export { WebSocketService } from './services/websocket.service.js';
-export { CronService } from './services/cron.service.js';
+// WebSocketService and CronService are intentionally NOT re-exported here:
+// both statically import an optional peer dependency (socket.io, node-cron
+// respectively) at module scope, so re-exporting them from this entrypoint
+// would force every katax-service-manager consumer to install both, even
+// apps that never call katax.socket()/katax.cron(). Use those methods on
+// the katax singleton instead, which loads each service's module lazily on
+// first use (see katax.ts's createSocket() / ensureCronService()).
 export { CacheService } from './services/cache.service.js';
 export { RegistryService } from './services/registry.service.js';
 export {

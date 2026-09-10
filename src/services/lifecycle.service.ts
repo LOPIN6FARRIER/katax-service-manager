@@ -12,7 +12,7 @@ export class LifecycleService {
     logger: ILoggerService;
     databases: Map<string, IDatabaseService>;
     sockets: Map<string, IWebSocketService>;
-    cronService: ICronService;
+    cronService: ICronService | null;
     registry: RegistryService | null;
     hooks?: KataxLifecycleHooks | null;
   }): Promise<{ registry: RegistryService | null }> {
@@ -66,13 +66,17 @@ export class LifecycleService {
       sockets.clear();
     }
 
-    try {
-      cronService.stopAll();
-      logger.info({ message: 'Cron jobs stopped' });
-    } catch (error) {
-      logger.error({ message: 'Failed to stop cron jobs', err: error });
-      errors.push({ service: 'cron', error });
-      await hooks?.onError?.('cron.stopAll', error);
+    // cronService is only created lazily on the first katax.cron() call -
+    // an app that never used it has nothing to stop here.
+    if (cronService) {
+      try {
+        cronService.stopAll();
+        logger.info({ message: 'Cron jobs stopped' });
+      } catch (error) {
+        logger.error({ message: 'Failed to stop cron jobs', err: error });
+        errors.push({ service: 'cron', error });
+        await hooks?.onError?.('cron.stopAll', error);
+      }
     }
 
     if (registry) {

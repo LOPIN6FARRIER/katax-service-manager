@@ -830,9 +830,10 @@ export interface ICronService {
 
   /**
    * Add a new cron job dynamically
+   * node-cron is loaded lazily on first use, so this is async.
    * @param job - Cron job configuration
    */
-  addJob(job: CronJobConfig): void;
+  addJob(job: CronJobConfig): Promise<void>;
 
   /**
    * Remove a cron job by name
@@ -842,9 +843,10 @@ export interface ICronService {
 
   /**
    * Start a specific job
+   * node-cron is loaded lazily on first use, so this is async.
    * @param name - Job name
    */
-  startJob(name: string): void;
+  startJob(name: string): Promise<void>;
 
   /**
    * Stop a specific job

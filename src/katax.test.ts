@@ -176,4 +176,72 @@ describe('Katax lifecycle hooks', () => {
 
     expect(() => katax.db('not-found-db')).toThrow(KataxDatabaseError);
   });
+
+  it('does not create a cron service until the first katax.cron() call', async () => {
+    const katax = new Katax();
+    await katax.init();
+
+    // Advanced getter should refuse before any job has ever been added -
+    // proves the CronService (and node-cron) isn't touched at init() time.
+    expect(() => katax.cronService).toThrow(KataxConfigError);
+
+    await katax.cron({ name: 'lazy-job', schedule: '0 2 * * *', task: vi.fn() });
+
+    expect(katax.cronService.getJobs()).toEqual([
+      { name: 'lazy-job', schedule: '0 2 * * *', enabled: true, running: true },
+    ]);
+  });
+
+  it('reuses the same cron service singleton across multiple katax.cron() calls', async () => {
+    const katax = new Katax();
+    await katax.init();
+
+    await katax.cron({ name: 'first', schedule: '0 1 * * *', task: vi.fn() });
+    const cronServiceAfterFirst = katax.cronService;
+
+    await katax.cron({ name: 'second', schedule: '0 2 * * *', task: vi.fn() });
+
+    expect(katax.cronService).toBe(cronServiceAfterFirst);
+    expect(katax.cronService.getJobs()).toHaveLength(2);
+  });
+
+  it('rejects katax.cron() with an invalid cron expression', async () => {
+    const katax = new Katax();
+    await katax.init();
+
+    await expect(
+      katax.cron({ name: 'bad', schedule: 'definitely not cron', task: vi.fn() })
+    ).rejects.toThrow('Invalid cron expression');
+  });
+
+  it('healthCheck reports cron as healthy when it was never used', async () => {
+    const katax = new Katax();
+    await katax.init();
+
+    const health = await katax.healthCheck();
+
+    expect(health.services.cron).toBe(true);
+    expect(health.status).toBe('healthy');
+  });
+
+  it('shutdown() does not throw when cron was never used', async () => {
+    const katax = new Katax();
+    await katax.init();
+
+    await expect(katax.shutdown()).resolves.not.toThrow();
+  });
+
+  it('lazily loads WebSocketService on first katax.socket() call and creates a working socket', async () => {
+    const { createServer } = await import('http');
+    const katax = new Katax();
+    await katax.init();
+
+    const httpServer = createServer();
+    const socket = await katax.socket({ name: 'main', httpServer });
+
+    expect(socket.getConnectedClientsCount()).toBe(0);
+    expect(katax.ws('main')).toBe(socket);
+
+    await socket.close();
+  });
 });

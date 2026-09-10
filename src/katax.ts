@@ -1,6 +1,5 @@
 import { LoggerService } from './services/logger.service.js';
 import { DatabaseService } from './services/database.service.js';
-import { WebSocketService } from './services/websocket.service.js';
 import { CacheService } from './services/cache.service.js';
 import { RegistryService } from './services/registry.service.js';
 import { BootstrapService } from './services/bootstrap.service.js';
@@ -203,12 +202,11 @@ export class Katax {
     );
     this._config = bootstrapResult.config;
     this._logger = bootstrapResult.logger;
-    this._cronService = bootstrapResult.cronService;
     this._appName = bootstrapResult.resolvedAppName;
 
     this._initialized = true;
 
-    this._logger.info({ message: 'Katax initialized (config, logger, cron ready)' });
+    this._logger.info({ message: 'Katax initialized (config, logger ready)' });
     this.registerProcessHandlers();
     if (config?.registry) {
       try {
@@ -478,6 +476,16 @@ export class Katax {
         message: `Creating WebSocket server '${config.name}' on port ${config.port ?? 3001}...`,
       });
     }
+    // socket.io is an optional peer dependency - loaded lazily here so apps
+    // that never call katax.socket() don't need it installed at all.
+    let WebSocketService: typeof import('./services/websocket.service.js').WebSocketService;
+    try {
+      ({ WebSocketService } = await import('./services/websocket.service.js'));
+    } catch (error) {
+      throw new KataxConfigError(
+        'katax.socket() requires "socket.io" to be installed.\nRun: npm install socket.io'
+      );
+    }
     const socket = new WebSocketService(config);
     await socket.init();
 
@@ -526,7 +534,14 @@ export class Katax {
   /**
    * Get the Cron service for advanced operations
    * (stopAll, getJobs, startJob, stopJob, removeJob)
-   * @throws Error if init() has not been called
+   *
+   * The cron service is created lazily on the first katax.cron() call, so
+   * this only works after at least one job has been registered - use
+   * await katax.cron(...) first, or use katax.cron() itself for the common
+   * "add a job" case.
+   *
+   * @throws Error if init() has not been called, or if no job has been
+   * added yet via katax.cron()
    */
   public get cronService(): ICronService {
     this.ensureInitialized();
@@ -534,7 +549,12 @@ export class Katax {
     if (cronOverride) {
       return cronOverride;
     }
-    return this._cronService!;
+    if (!this._cronService) {
+      throw new KataxConfigError(
+        'Cron service not initialized yet - call await katax.cron(...) at least once before accessing katax.cronService.'
+      );
+    }
+    return this._cronService;
   }
 
   /**
@@ -593,6 +613,13 @@ export class Katax {
    * Add a cron job
    * Convenient method to add jobs using katax.cron({ name, schedule, task })
    *
+   * node-cron is an optional peer dependency, loaded lazily on first use -
+   * apps that never call katax.cron() don't need it installed. Awaiting is
+   * optional (kept for backwards compatibility with existing fire-and-forget
+   * call sites); await it if you want registration errors (bad schedule,
+   * missing node-cron) to surface at the call site instead of as an
+   * unhandled rejection.
+   *
    * @example
    * katax.cron({
    *   name: 'my-job',
@@ -600,9 +627,26 @@ export class Katax {
    *   task: () => console.log('Running...')
    * });
    */
-  public cron(job: CronJobConfig): void {
+  public async cron(job: CronJobConfig): Promise<void> {
     this.ensureInitialized();
-    this._cronService!.addJob(job);
+    const cronService = await this.ensureCronService();
+    await cronService.addJob(job);
+  }
+
+  /**
+   * Lazily creates the CronService singleton on first use. node-cron is an
+   * optional peer dependency - loaded here (inside CronService itself, on
+   * its own first job add/start) rather than at bootstrap, so apps that
+   * never call katax.cron() never need it installed.
+   */
+  private async ensureCronService(): Promise<ICronService> {
+    if (!this._cronService) {
+      const { CronService } = await import('./services/cron.service.js');
+      const cronService = new CronService();
+      await cronService.init();
+      this._cronService = cronService;
+    }
+    return this._cronService;
   }
 
   /**
@@ -934,7 +978,7 @@ export class Katax {
    */
   public async healthCheck(): Promise<HealthCheckResult> {
     this.ensureInitialized();
-    return this._healthService.check(this._databases, this._sockets, this._cronService!);
+    return this._healthService.check(this._databases, this._sockets, this._cronService);
   }
 
   /**
@@ -1022,7 +1066,7 @@ export class Katax {
       logger: this._logger!,
       databases: this._databases,
       sockets: this._sockets,
-      cronService: this._cronService!,
+      cronService: this._cronService,
       registry: this._registry,
       hooks: this._hooks,
     });
