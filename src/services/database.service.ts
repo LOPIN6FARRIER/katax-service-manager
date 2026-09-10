@@ -240,6 +240,14 @@ class RedisAdapter implements DatabaseAdapter {
     if (typeof config.connection === 'string') {
       const client = createClient({
         url: config.connection,
+        // RESP2, not the client default (RESP3 when the server supports
+        // it): every raw redis() command in this codebase (XREADGROUP in
+        // redis-stream-bridge.service.ts, XADD in registration.js, etc.)
+        // assumes RESP2's array-shaped replies. node-redis decodes RESP3
+        // maps/sets into plain objects instead, which broke stream
+        // iteration with "result is not iterable" as soon as an app
+        // actually exercised the Redis stream bridge.
+        RESP: 2,
         socket: {
           reconnectStrategy: defaultReconnectStrategy,
         },
@@ -263,6 +271,8 @@ class RedisAdapter implements DatabaseAdapter {
 
     const client = createClient({
       url,
+      // RESP2 - see comment in the string-connection branch above.
+      RESP: 2,
       socket: {
         reconnectStrategy: defaultReconnectStrategy,
       },

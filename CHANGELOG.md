@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.1] - 2026-09-10
+
+### 🐛 Fixed — "result is not iterable" crash in the Redis Stream bridge
+
+`RedisAdapter.init()` created the Redis client without pinning a RESP
+protocol version, so `node-redis` negotiated RESP3 with any RESP3-capable
+server (Redis 6+/Valkey) by default. Every raw `redis()` command in this
+codebase (`XREADGROUP` in `redis-stream-bridge.service.ts`, `XADD` in
+`registration.js`, etc.) assumes RESP2's array-shaped replies -
+`node-redis` decodes RESP3 maps into plain JS objects instead, which
+aren't iterable the way this code expects. `RedisStreamBridgeService.loop()`
+threw `TypeError: result is not iterable` on every poll once an app
+actually called `katax.bridge()` against a RESP3-negotiating server -
+this had been dormant because nothing exercised that path with a RESP3
+server until now.
+
+Fixed by explicitly requesting `RESP: 2` when creating the Redis client,
+restoring the array-shaped replies this code was written against.
+
 ## [0.6.0] - 2026-09-10
 
 ### 🐛 Fixed — node-cron and socket.io were never actually optional
