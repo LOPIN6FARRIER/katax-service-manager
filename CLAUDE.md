@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`katax-service-manager` (currently v0.5.9) — a singleton runtime service container for Node.js apps. Manages config, Pino-based logging, database pools (PostgreSQL/MySQL/MongoDB/Redis), WebSocket (Socket.IO), cron, cache, and a registry/heartbeat system, with graceful shutdown wired to SIGTERM/SIGINT. Part of the Katax ecosystem alongside `katax-core` (validation) and `katax-cli` (scaffolding), sibling repos under `Katax-ecosytem/`.
+`katax-service-manager` (currently v0.6.1) — a singleton runtime service container for Node.js apps. Manages config, Pino-based logging, database pools (PostgreSQL/MySQL/MongoDB/Redis), WebSocket (Socket.IO), cron, cache, and a registry/heartbeat system, with graceful shutdown wired to SIGTERM/SIGINT. Part of the Katax ecosystem alongside `katax-core` (validation) and `katax-cli` (scaffolding), sibling repos under `Katax-ecosytem/`.
 
 ESM-only package (`"type": "module"`), Node >= 18, all runtime DB/WS/cron/pino-pretty/dotenv deps are **optional peer dependencies** — the code dynamically imports them so the package works with none installed until a feature needing them is used.
 

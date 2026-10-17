@@ -5,7 +5,7 @@
 
 **Runtime service container for Node.js applications** - Manages shared services like config, logging, database pools, caching, and WebSocket connections with a singleton pattern.
 
-**Version**: 0.5.9 | **Node**: >= 18
+**Version**: 0.6.1 | **Node**: >= 18
 
 ## Features
 
@@ -32,6 +32,8 @@ npm install katax-service-manager
 ```
 
 ### Optional peer dependencies
+
+Install only what you use. Every integration is loaded lazily on first use, so `import { katax } from 'katax-service-manager'` works with none of them installed (also under pnpm's strict `node_modules`).
 
 ```bash
 npm install pg               # PostgreSQL
@@ -69,12 +71,12 @@ const users = await db.query('SELECT * FROM users WHERE active = $1', [true]);
 // Logger
 katax.logger.info({ message: 'App started', users: users.length });
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  await katax.shutdown();
-  process.exit(0);
-});
+// Graceful shutdown: init() already registers SIGTERM/SIGINT handlers
+// that call katax.shutdown() and exit. Add your own cleanup with onShutdown().
+katax.onShutdown(async () => { /* close custom resources */ });
 ```
+
+`katax.database({ type: 'postgresql' | 'mysql' })` is typed as `ISqlDatabase`, so `db.query()` is available directly (see [Typed Database Access](#typed-database-access)).
 
 ## Core Concepts
 
@@ -84,7 +86,7 @@ process.on('SIGTERM', async () => {
 import { Katax, katax } from 'katax-service-manager';
 
 // Pre-exported singleton (recommended)
-katax.init();
+await katax.init();
 
 // Or explicit singleton
 Katax.getInstance();
@@ -93,8 +95,8 @@ Katax.getInstance();
 const instance = new Katax();
 await instance.init();
 
-// Reset singleton (testing)
-Katax.reset();
+// Reset singleton (testing): closes connections and removes signal handlers
+await Katax.reset();
 ```
 
 ### Service Reuse
@@ -108,6 +110,8 @@ console.log(db1 === db2); // true
 ```
 
 ### Graceful Shutdown
+
+`katax.init()` registers `SIGTERM` and `SIGINT` handlers that run `katax.shutdown()` and then `process.exit(0)`. You don't need your own `process.on('SIGTERM')`. To shut down manually:
 
 ```typescript
 await katax.shutdown(); // Closes all databases, WebSockets, bridges, heartbeats, stops cron
@@ -134,9 +138,12 @@ const secret = katax.envRequired('JWT_SECRET');
 
 ```typescript
 const port = katax.config.get('PORT', 3000);
-const all = katax.config.getAll();
 const exists = katax.config.has('API_KEY');
 katax.config.set('custom', value);
+
+// getAll() exists on the ConfigService class but not on the IConfigService interface:
+import { ConfigService } from 'katax-service-manager';
+const all = (katax.config as ConfigService).getAll();
 ```
 
 ## Logger Service
@@ -159,25 +166,35 @@ katax.logger.fatal({ message: 'Unrecoverable error' });
 
 ### Structured Log Objects
 
+Every level accepts a string or an object, plus an optional second argument (`LogConfig`) for routing. Routing flags are never sent to transports.
+
 ```typescript
-katax.logger.info({
-  message: 'User logged in',
-  userId: 123,
-  ip: '192.168.1.1',
-  method: 'POST',
-  path: '/login',
-  duration: 45,
-  statusCode: 200,
-  requestId: 'req-abc-123',
-  code: 'AUTH_OK',
-  broadcast: true,   // emit to WebSocket
-  room: 'admin',      // WebSocket room
-  persist: true,      // force transport persistence
-  skipTransport: true,// skip all transports
-  skipTelegram: true, // skip Telegram only
-  skipRedis: true,    // skip Redis only
-});
+katax.logger.info('Server started');
+
+katax.logger.info(
+  {
+    message: 'User logged in',
+    userId: 123,
+    ip: '192.168.1.1',
+    method: 'POST',
+    path: '/login',
+    duration: 45,
+    statusCode: 200,
+    requestId: 'req-abc-123',
+    code: 'AUTH_OK',
+  },
+  {
+    broadcast: true,     // emit to WebSocket
+    room: 'admin',       // WebSocket room
+    persist: true,       // force transport persistence
+    skipTransport: true, // skip all transports
+    skipTelegram: true,  // skip Telegram only
+    skipRedis: true,     // skip Redis only
+  },
+);
 ```
+
+> The legacy style (routing flags inside the log object, e.g. `{ message: 'x', persist: true }`) still works but is deprecated.
 
 ### Child Loggers
 
@@ -232,8 +249,9 @@ katax.logger.addTransport(telegramTransport);
 katax.logger.removeTransport('redis');
 await katax.logger.closeTransports();
 
-// Access underlying Pino
-const pinoLogger = katax.logger.getPinoLogger();
+// Access underlying Pino (method of the LoggerService class)
+import { LoggerService } from 'katax-service-manager';
+const pinoLogger = (katax.logger as LoggerService).getPinoLogger();
 ```
 
 ### LogTransport Interface
@@ -302,13 +320,28 @@ await redis.redis('SET', 'key', 'value', 'EX', '60');
 const val = await redis.redis('GET', 'key');
 ```
 
+> The Redis client is created with `RESP: 2`, so raw commands return RESP2 (array-shaped) replies even against Redis 6+/Valkey servers.
+
 ### Typed Database Access
 
+`katax.database()` returns a type that depends on `type` (and on `required`):
+
+| `type` | Returns | Main method |
+|---|---|---|
+| `'postgresql'` / `'mysql'` | `ISqlDatabase` | `query<T>(sql, params?)` |
+| `'mongodb'` | `IMongoDatabase` | `getClient()` (MongoClient) |
+| `'redis'` | `IRedisDatabase` | `redis(...args)` |
+
+With `required: false` the return type is `... | null` (connection failures return `null` instead of throwing).
+
+`katax.db(name)` returns the generic `IDatabaseService` (its `query`/`redis` are optional). Narrow it with a type cast, or with the `as*()` helpers of the `DatabaseService` class (they also check the connection type at runtime):
+
 ```typescript
-const db = katax.db('main');
-db.asSql()    // ISqlDatabase - PostgreSQL or MySQL
-db.asMongo()  // IMongoDatabase
-db.asRedis()  // IRedisDatabase
+import { katax, DatabaseService, type ISqlDatabase } from 'katax-service-manager';
+
+const sql = katax.db('main') as ISqlDatabase;            // compile-time only
+const sql2 = (katax.db('main') as DatabaseService).asSql(); // throws if 'main' isn't SQL
+// .asMongo() -> IMongoDatabase, .asRedis() -> IRedisDatabase
 ```
 
 ## Cache Service
@@ -345,9 +378,11 @@ const stats = await cache.stats();
 
 ## Cron Service
 
+Requires `node-cron`, which is loaded on the first `katax.cron()` call. `katax.cron()` returns a `Promise<void>`: `await` it so invalid schedules or a missing `node-cron` surface at the call site.
+
 ```typescript
 // Shortcut via katax.cron()
-katax.cron({
+await katax.cron({
   name: 'cleanup',
   schedule: '0 0 * * *',
   task: async () => { await cleanupOldData(); },
@@ -357,16 +392,26 @@ katax.cron({
 });
 
 // Advanced management via katax.cronService
+// (available after the first `await katax.cron(...)`; throws KataxConfigError before that)
 const jobs = katax.cronService.getJobs();
 // [{ name: 'cleanup', schedule: '0 0 * * *', enabled: true, running: true }]
 
-katax.cronService.startJob('cleanup');
+await katax.cronService.startJob('cleanup');
 katax.cronService.stopJob('cleanup');
 katax.cronService.removeJob('cleanup');
 katax.cronService.stopAll();
 ```
 
 ## WebSocket Service
+
+Requires `socket.io`, loaded on the first `katax.socket()` call. Use `port` for a standalone server, or `httpServer` to share the port with Express:
+
+```typescript
+import { createServer } from 'http';
+const httpServer = createServer(app);
+await katax.socket({ name: 'main', httpServer });
+httpServer.listen(3000);
+```
 
 ```typescript
 const ws = await katax.socket({
@@ -397,8 +442,9 @@ ws.getRoomClientsCount('room1');
 ws.hasConnectedClients();
 ws.getConnectedClientsCount();
 
-// Access underlying Socket.IO server
-const io = ws.getServer(); // SocketIOServer | null
+// Underlying Socket.IO server: getServer() is on the WebSocketService class,
+// not on the IWebSocketService interface returned by katax.socket()
+const io = (ws as unknown as { getServer(): import('socket.io').Server | null }).getServer();
 
 // Quick access by name
 const mainWs = katax.ws('main');
@@ -548,7 +594,7 @@ await registerProjectInRedis(redisDb, { app: 'myapp', version: '1.0' });
 |---|---|---|
 | `new Katax()` | `Katax` | Create isolated instance |
 | `Katax.getInstance()` | `Katax` | Get singleton instance |
-| `Katax.reset()` | `void` | Reset singleton (testing) |
+| `Katax.reset()` | `Promise<void>` | Shut down and reset singleton (testing) |
 | `init(config?)` | `Promise<Katax>` | Initialize services |
 | `shutdown()` | `Promise<void>` | Graceful shutdown all services |
 | `onShutdown(fn)` | `void` | Register custom shutdown hook |
@@ -558,11 +604,11 @@ await registerProjectInRedis(redisDb, { app: 'myapp', version: '1.0' });
 | `envRequired(key)` | `string` | Required env var (throws if missing) |
 | `healthCheck()` | `Promise<HealthCheckResult>` | Health status of all services |
 | `getServiceInfo()` | `ServiceInfo \| null` | Package metadata + system metrics |
-| `database(config)` | `Promise<IDatabaseService \| null>` | Create/retrieve database connection |
+| `database(config)` | `Promise<ISqlDatabase \| IMongoDatabase \| IRedisDatabase>` (by `type`; `\| null` with `required: false`) | Create/retrieve database connection |
 | `db(name)` | `IDatabaseService` | Quick access to database by name |
 | `socket(config)` | `Promise<IWebSocketService>` | Create/retrieve WebSocket server |
 | `ws(name)` | `IWebSocketService` | Quick access to WebSocket by name |
-| `cron(job)` | `void` | Add a cron job |
+| `cron(job)` | `Promise<void>` | Add a cron job (loads `node-cron` on first use) |
 | `cache(redisName?)` | `CacheService` | Create cache service (default: 'cache') |
 | `bridge(redisName?, socketName?, config)` | `RedisStreamBridgeService` | Create Redis stream bridge |
 | `heartbeat(opts, redisName?, socketName?)` | `{ stop: () => void }` | Start managed heartbeat |
@@ -573,7 +619,7 @@ await registerProjectInRedis(redisDb, { app: 'myapp', version: '1.0' });
 |---|---|---|
 | `config` | `IConfigService` | Config service (throws if not init) |
 | `logger` | `ILoggerService` | Logger (auto-created, even before init) |
-| `cronService` | `ICronService` | Advanced cron management |
+| `cronService` | `ICronService` | Advanced cron management (after the first `katax.cron()`) |
 | `isInitialized` | `boolean` | Whether init() was called |
 | `appName` | `string` | App name from package.json |
 | `version` | `string` | Version from package.json |
@@ -612,6 +658,7 @@ interface WebSocketConfig {
 ### CronJobConfig
 
 ```typescript
+// ICronService: addJob/startJob return Promise<void>; removeJob/stopJob/stopAll/getJobs are sync
 interface CronJobConfig {
   name: string;
   schedule: string;
